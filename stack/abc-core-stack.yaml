@@ -74,7 +74,12 @@ Parameters:
     Type: String
     Description: The HostedZoneName to use for the Builder Vault
     AllowedPattern: "[a-zA-Z0-9.-]{1,50}"
-    Default: dev-tsm.myabcwallet.com
+    Default: dev-p2.tsm.myabcwallet.com
+  OtherHostedZoneName:
+    Type: String
+    Description: The OtherHostedZoneName to use for the Builder Vault
+    AllowedPattern: "[a-zA-Z0-9.-]{1,50}"
+    Default: dev-p1.tsm.myabcwallet.com
   HostedZoneId:
     Type: String
     Description: The HostedZoneId to use for the Builder Vault
@@ -509,7 +514,7 @@ Resources:
         DNSName: !GetAtt NodeNetworkLoadBalancerV2.DNSName
         HostedZoneId: !GetAtt NodeNetworkLoadBalancerV2.CanonicalHostedZoneID
       HostedZoneId: !Ref HostedZoneId
-      Name: !Sub tsm-node-${NodeIndex}-0.${HostedZoneName}
+      Name: !Sub node-1.${HostedZoneName}
       SetIdentifier: !Sub node-1-${NodeNetworkLoadBalancerV2.LoadBalancerName}
       Type: A
       Weight: 100
@@ -681,13 +686,17 @@ Resources:
           GroupSet:
             - !GetAtt NodeSg.GroupId
           SubnetId: !Ref VpcPublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub tsm-${Namespace}-node-${NodeIndex}
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
           echo "Starting Builder Vault Node ${NodeIndex}"
           export NODE_INDEX=${NodeIndex}
           export HOSTED_ZONE_NAME=${HostedZoneName}
-          export THIS_PLAYER_ADDRESS=tsm-node-${NodeIndex}-0.${HostedZoneName}
+          export OTHER_HOSTED_ZONE_NAME=${OtherHostedZoneName}
+          export THIS_PLAYER_ADDRESS=node-1.${HostedZoneName}
           export APPLICATION_ID=${Namespace}-${NodeIndex}
           cd /home/ec2-user/tsm && ./params.sh arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Namespace}/tsm/node-bootstrap-parameter-${NodeIndex} ${AnotherNodeSSMParameter} ${DbSecret}
           cd /home/ec2-user/tsm && ./run.sh ${NodeIndex}
