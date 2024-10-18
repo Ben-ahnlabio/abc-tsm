@@ -244,7 +244,7 @@ type GenerateKeyResponse struct {
 
 func startGenerateKeySession(publicKey string) string {
 
-	url := "http://localhost:3000/generateKey"
+	url := "http://localhost:3000/v1/tsm/generateKey"
 	addrReqBody := GenerateKeyRequestBody{
 		PublicKey: publicKey,
 	}
@@ -292,7 +292,7 @@ type CopyKeyResponse struct {
 }
 
 func startCopyKeySession(publicKey string, existingKeyId string) string {
-	url := "http://localhost:3000/copyKey"
+	url := "http://localhost:3000/v1/tsm/copyKey"
 	addrReqBody := CopyKeyRequestBody{
 		PublicKey: publicKey,
 		KeyId:     existingKeyId,
@@ -342,7 +342,7 @@ type PreSignResponse struct {
 }
 
 func startGeneratePreSignSignSession(publicKey string, keyId string) string {
-	url := "http://localhost:3000/preSign"
+	url := "http://localhost:3000/v1/tsm/preSign"
 	addrReqBody := PreSignRequestBody{
 		PublicKey: publicKey,
 		KeyId:     keyId,
@@ -394,7 +394,7 @@ type GetPartialSignResultResponse struct {
 }
 
 func getPartialSignResult(preSignatureId string, keyId string, messageHash string) string {
-	url := "http://localhost:3000/finalizeSign"
+	url := "http://localhost:3000/v1/tsm/finalizeSign"
 	addrReqBody := GetPartialSizeResultRequestBody{
 		PreSignatureId: preSignatureId,
 		KeyId:          keyId,

@@ -38,10 +38,10 @@ func getRouter() *gin.Engine {
 	r.GET("/swagger/*any", func(c *gin.Context) {
 		ginSwagger.WrapHandler(swaggerFiles.Handler)(c)
 	})
-	r.POST("/generateKey", handlers.GenerateKeyHandler)
-	r.POST("/copyKey", handlers.CopyKeyHandler)
-	r.POST("/preSign", handlers.PreSignHandler)
-	r.POST("/finalizeSign", handlers.PartialSignHandler)
+	r.POST("/v1/tsm/generateKey", handlers.GenerateKeyHandler)
+	r.POST("/v1/tsm/copyKey", handlers.CopyKeyHandler)
+	r.POST("/v1/tsm/preSign", handlers.PreSignHandler)
+	r.POST("/v1/tsm/finalizeSign", handlers.PartialSignHandler)
 	return r
 }
 
