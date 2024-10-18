@@ -719,3 +719,8 @@ Outputs:
     Value: !Ref Vpc
     Export:
       Name: !Sub ${AWS::StackName}-VpcId
+  NetworkLoadBalancerDNSName:
+    Description: DNS name of the network load balancer
+    Value: !GetAtt NodeNetworkLoadBalancerV2.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}-NetworkLoadBalancerDNSName

@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: |
+  ABC TSM Core Stack
+Parameters:
+  NodeAWSAccount:
+    Type: String
+    Description: The AWS account where the TSM node is deployed.
+    AllowedPattern: ^\d{12}$
+    ConstraintDescription:
+      Must be a valid AWS account ID. Ensure that it is the AWS
+      account of the Builder Vault that you will allow to access the node.
+    Default: "915486611144"
+  Environ:
+    Type: String
+    Default: builder-vault
+    Description: Optional environment name to use for the Builder Vault prefix
+    MaxLength: 13
+  Namespace:
+    Type: String
+    MaxLength: 30
+    AllowedPattern: ^[a-z]*$
+    ConstraintDescription: Must be up to 30 characters, and can only include lowercase letters.
+    Description: A Unique namespace for the Builder Vault.
+    Default: abcdev
+  NodeIndex:
+    Type: String
+    Description:
+      The index of the node. This must correspond to the Builder Vault
+      node index that this key will be used for.
+    AllowedValues:
+      - "1"
+      - "2"
+    Default: "2"
+  ECRImageURI:
+    Type: String
+    Description: The URI of the image to use for the TSM controller
+    Default: 915486611144.dkr.ecr.ap-northeast-2.amazonaws.com/tsm-controller:0.2.dev
+  KMSStackName:
+    Type: String
+    Description: The name of the KMS stack for the TSM node
+    Default: abc-kms-stack
+Resources:
+  ControllerInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: |
+        The IAM role for TSM controller instance
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+          - Sid: AllowParameterAccess
+            Action:
+              - ssm:GetParameter
+              - ssm:DescribeParameters
+            Effect: Allow
+            Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+          - Sid: KMSforThisAccount
+            Action:
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+              - kms:ReEncrypt*
+            Effect: Allow
+            Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
+
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonECSServiceRolePolicy
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonECSTaskExecutionRolePolicy
+  TSMControllerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub abc-tsm-controller-${NodeIndex}
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      ContainerDefinitions:
+        - Name: tsm-controller
+          Image: !Sub ${ECRImageURI}
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub /ecs/tsm-controller-${NodeIndex}
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Environment:
+            - Name: APP_NAME
+              Value: !Sub tsm-controller-${NodeIndex}
+            - Name: BUILD_TYPE
+              Value: release
+            - Name: PLAYER_INDEX
+              Value: !Ref NodeIndex
+            - Name: NODE_URL
+              Value: http://nlb-tsm-node-1-abcdev-v2-d8b0d4cba332a631.elb.ap-northeast-2.amazonaws.com:8000
+            - Name: NODE_API_KEY
+              ValueFrom: !Sub "${KMSStackName}-NodeAPIKey"
+
+
+
+
+              
+
+              
+              

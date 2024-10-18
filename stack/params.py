@@ -51,14 +51,12 @@ def main():
 
 def get_other_player_address():
     """
-    tsm-node-${NodeIndex}-0.${HostedZoneName}
-    tsm-node-1-0.dev-tsm.myabcwallet.com
+    node-1.${HostedZoneName}
+    node-1.dev-p2.tsm.myabcwallet.com
     """
-
-    this_node_index = os.getenv("NODE_INDEX")
-    hosted_zone_name = os.getenv("HOSTED_ZONE_NAME")
-    other_node_index = "1" if this_node_index == "2" else "2"
-    return f"tsm-node-{other_node_index}-0.{hosted_zone_name}:9000?connectionPoolSize=6&connectionLifetime=5m"
+    
+    hosted_zone_name = os.getenv("OTHER_HOSTED_ZONE_NAME")
+    return f"node-1.{hosted_zone_name}:9000?connectionPoolSize=6&connectionLifetime=5m"
 
 
 def get_env_from_this_param(this_param_arn: str) -> dict:
