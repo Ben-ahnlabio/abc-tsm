@@ -1,0 +1,180 @@
+basePath: /
+definitions:
+  handlers.CopyKeyRequestBody:
+    properties:
+      existingKeyId:
+        example: zUhWR7jvWJoplMyFf35NHSdZXbtx
+        type: string
+      publicKey:
+        example: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A==
+        type: string
+      sessionId:
+        example: 923J-NNcZlScEGi1phSmDWO-eZsQLtBGHVWIIIWZ7Zw
+        type: string
+    required:
+    - existingKeyId
+    - publicKey
+    - sessionId
+    type: object
+  handlers.GenerateKeyRequestBody:
+    properties:
+      publicKey:
+        example: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A==
+        type: string
+      sessionId:
+        example: 923J-NNcZlScEGi1phSmDWO-eZsQLtBGHVWIIIWZ7Zw
+        type: string
+    required:
+    - publicKey
+    - sessionId
+    type: object
+  handlers.PresignRequestBody:
+    properties:
+      count:
+        example: 3
+        type: integer
+      keyId:
+        example: zUhWR7jvWJoplMyFf35NHSdZXbtx
+        type: string
+      publicKey:
+        example: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A==
+        type: string
+      sessionId:
+        example: 923J-NNcZlScEGi1phSmDWO-eZsQLtBGHVWIIIWZ7Zw
+        type: string
+    required:
+    - count
+    - keyId
+    - publicKey
+    - sessionId
+    type: object
+  handlers.SignRequestBody:
+    properties:
+      keyId:
+        example: zUhWR7jvWJoplMyFf35NHSdZXbtx
+        type: string
+      messageHash:
+        example: MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A==
+        type: string
+      signSignatureId:
+        example: 923J-NNcZlScEGi1phSmDWO-eZsQLtBGHVWIIIWZ7Zw
+        type: string
+    required:
+    - keyId
+    - messageHash
+    - signSignatureId
+    type: object
+  main.RootResponse:
+    properties:
+      build_type:
+        type: string
+      name:
+        type: string
+      time:
+        type: string
+      version:
+        type: string
+    type: object
+host: localhost:3000
+info:
+  contact: {}
+  description: tsm controller API v0.0.1
+  title: tsm controller API
+  version: 0.0.1
+paths:
+  /:
+    get:
+      consumes:
+      - application/json
+      description: get application info
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.RootResponse'
+      summary: Show the application info
+      tags:
+      - info
+  /v1/copyKey:
+    post:
+      consumes:
+      - application/json
+      description: Copy a session key
+      parameters:
+      - description: Public key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CopyKeyRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Copy a session key
+      tags:
+      - session
+  /v1/generateKey:
+    post:
+      consumes:
+      - application/json
+      description: Generate a session key
+      parameters:
+      - description: Public key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.GenerateKeyRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Generate a session key
+      tags:
+      - session
+  /v1/presign:
+    post:
+      consumes:
+      - application/json
+      description: Start a presign session
+      parameters:
+      - description: Public key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.PresignRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Start a presign session
+      tags:
+      - session
+  /v1/sign:
+    post:
+      consumes:
+      - application/json
+      description: Finalize a sign session
+      parameters:
+      - description: Public key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SignRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Finalize a sign session
+      tags:
+      - session
+swagger: "2.0"

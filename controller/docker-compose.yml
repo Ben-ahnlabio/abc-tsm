@@ -1,0 +1,24 @@
+services:
+  tsm-controller1:
+    container_name: tsm-controller1
+    image: tsm-controller:0.2.dev
+    networks:
+      - tsm_external
+    ports:
+      - "4001:3000"
+    env_file:
+      - .env.node1
+
+  tsm-controller2:
+    container_name: tsm-controller2
+    image: tsm-controller:0.2.dev
+    networks:
+      - tsm_external
+    ports:
+      - "4002:3000"
+    env_file:
+      - .env.node2
+
+networks:
+  tsm_external:
+    external: true

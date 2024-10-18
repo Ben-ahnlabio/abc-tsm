@@ -1,0 +1,267 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "tsm controller API v0.0.1",
+        "title": "tsm controller API",
+        "contact": {},
+        "version": "0.0.1"
+    },
+    "host": "localhost:3000",
+    "basePath": "/",
+    "paths": {
+        "/": {
+            "get": {
+                "description": "get application info",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "info"
+                ],
+                "summary": "Show the application info",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.RootResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/copyKey": {
+            "post": {
+                "description": "Copy a session key",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "session"
+                ],
+                "summary": "Copy a session key",
+                "parameters": [
+                    {
+                        "description": "Public key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CopyKeyRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/v1/generateKey": {
+            "post": {
+                "description": "Generate a session key",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "session"
+                ],
+                "summary": "Generate a session key",
+                "parameters": [
+                    {
+                        "description": "Public key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.GenerateKeyRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/v1/presign": {
+            "post": {
+                "description": "Start a presign session",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "session"
+                ],
+                "summary": "Start a presign session",
+                "parameters": [
+                    {
+                        "description": "Public key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.PresignRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/v1/sign": {
+            "post": {
+                "description": "Finalize a sign session",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "session"
+                ],
+                "summary": "Finalize a sign session",
+                "parameters": [
+                    {
+                        "description": "Public key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.SignRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "handlers.CopyKeyRequestBody": {
+            "type": "object",
+            "required": [
+                "existingKeyId",
+                "publicKey",
+                "sessionId"
+            ],
+            "properties": {
+                "existingKeyId": {
+                    "type": "string",
+                    "example": "zUhWR7jvWJoplMyFf35NHSdZXbtx"
+                },
+                "publicKey": {
+                    "type": "string",
+                    "example": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A=="
+                },
+                "sessionId": {
+                    "type": "string",
+                    "example": "923J-NNcZlScEGi1phSmDWO-eZsQLtBGHVWIIIWZ7Zw"
+                }
+            }
+        },
+        "handlers.GenerateKeyRequestBody": {
+            "type": "object",
+            "required": [
+                "publicKey",
+                "sessionId"
+            ],
+            "properties": {
+                "publicKey": {
+                    "type": "string",
+                    "example": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A=="
+                },
+                "sessionId": {
+                    "type": "string",
+                    "example": "923J-NNcZlScEGi1phSmDWO-eZsQLtBGHVWIIIWZ7Zw"
+                }
+            }
+        },
+        "handlers.PresignRequestBody": {
+            "type": "object",
+            "required": [
+                "count",
+                "keyId",
+                "publicKey",
+                "sessionId"
+            ],
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "keyId": {
+                    "type": "string",
+                    "example": "zUhWR7jvWJoplMyFf35NHSdZXbtx"
+                },
+                "publicKey": {
+                    "type": "string",
+                    "example": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A=="
+                },
+                "sessionId": {
+                    "type": "string",
+                    "example": "923J-NNcZlScEGi1phSmDWO-eZsQLtBGHVWIIIWZ7Zw"
+                }
+            }
+        },
+        "handlers.SignRequestBody": {
+            "type": "object",
+            "required": [
+                "keyId",
+                "messageHash",
+                "signSignatureId"
+            ],
+            "properties": {
+                "keyId": {
+                    "type": "string",
+                    "example": "zUhWR7jvWJoplMyFf35NHSdZXbtx"
+                },
+                "messageHash": {
+                    "type": "string",
+                    "example": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A=="
+                },
+                "signSignatureId": {
+                    "type": "string",
+                    "example": "923J-NNcZlScEGi1phSmDWO-eZsQLtBGHVWIIIWZ7Zw"
+                }
+            }
+        },
+        "main.RootResponse": {
+            "type": "object",
+            "properties": {
+                "build_type": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "time": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}
