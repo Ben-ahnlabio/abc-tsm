@@ -3,11 +3,11 @@
 	PrivateKey = "MHcCAQEEIJXPO3VbvYki2DQzTkM3lwpEDVvng6JU45us8PL83S5foAoGCCqGSM49AwEHoUQDQgAE2Bk6ZSVUhIStsXZsqyYidPy8vEQvLDVQ/YRgfgowgWFualE748OFoGwuGgE8C7L2zV4gX+1Ow1x/OTjqSSlh5A=="
 
 [Players.1]
-	Address = "tcp://tsm-node-1-0.dev-tsm1.myabcwallet.com:9000?connectionPoolSize=6&connectionLifetime=5m"
+	Address = "tcp://nlb-tsm-node-1-abcdev-v2-d8b0d4cba332a631.elb.ap-northeast-2.amazonaws.com:9000?connectionPoolSize=6&connectionLifetime=5m"
 	PublicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+zjFuzcHjYpgSCJ8ZELxsYfRRk0ATVLy9Mub9XmsnHFUvSczDGSdpAatMmoQ5yYN3ESMo6AjNPokELO3eNt8nQ=="
 
 [Players.2]
-	Address = "tcp://tsm-node-2-0.dev-tsm.myabcwallet.com:9000?connectionPoolSize=6&connectionLifetime=5m"
+	Address = "tcp://nlb-tsm-node-2-abcdev-v2-7035f80bba7cf234.elb.ap-northeast-2.amazonaws.com:9000?connectionPoolSize=6&connectionLifetime=5m"
 	PublicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Xbeidiep/eYYVHlYlyg99uzqNtsoJlVAlDf/m78zNu5bCTTBRUEg66ahw+j5I23xgoKAQalTihtIFwYqQYQNA=="
   
 [Database]
