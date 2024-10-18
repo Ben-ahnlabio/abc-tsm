@@ -1,0 +1,640 @@
+# cloudformation stack that deploys a kms key, ssm parameter, s3 bucket, and 2 secrets manager secrets
+# The input parameters will be a target aws account, and a namespace
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  Blockdaemon KMS Stack for AWS Builder Vault. This stack creates resources needed for operating a Builder Vault node in AWS. Check with your
+  Builder Vault infrastructure operator to ensure that the correct parameters are used. Deploys secrets manager secrets, ssm parameters, kms keys, and s3 buckets used
+  by your Builder Vault.
+Parameters:
+  BuilderVaultAWSAccount:
+    Type: String
+    Description: The AWS account where the Builder Vault infrastructure is deployed
+    AllowedPattern: '^\d{12}$'
+    ConstraintDescription: Must be a valid AWS account ID. Ensure that it is the AWS account of the Builder Vault that you will allow to access the node.
+  Namespace:
+    Type: String
+    AllowedPattern: '^[a-z]*$'
+    MaxLength: 30
+    ConstraintDescription: Must be up to 30 characters, and can only include lowercase letters.
+    Description: A Unique namespace for the Builder Vault.
+  BlockdaemonPCR8:
+    Type: String
+    Description: The Blockdaemon PCR8 to use for the Builder Vault
+    Default: e6d548020e7e2aa4bd5d9cb79b83dca88859d538f308d74d8b5d0955556c12d828565c3ad7f7513dee21fc6d5bd80cbb
+  NodeIndex:
+    Type: String
+    AllowedPattern: ^(?:[1-9]|\d\d\d*)$
+    Description: The index of the node. This must correspond to the Builder Vault node index that this key will be used for.
+  DeletePolicy:
+    Type: String
+    Default: Retain
+    AllowedValues:
+    - Delete
+    - Retain
+    Description: |
+      The policy to apply when the stack is deleted. Only use Delete if you
+      want to delete the resources created by this stack. Retain will keep the resources
+      and you will have to manually delete them.
+Resources:
+  NodeKMSKeyNitro:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS Key for encrypting resources
+      EnableKeyRotation: true
+      Enabled: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: account-permissions
+        Statement:
+          - Sid: Enable Access for Root
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - kms:CancelKeyDeletion
+              - kms:Create*
+              - kms:Delete*
+              - kms:Describe*
+              - kms:Disable*
+              - kms:Enable*
+              - kms:Get*
+              - kms:List*
+              - kms:Put*
+              - kms:Revoke*
+              - kms:ScheduleKeyDeletion
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:Update*
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey
+            Resource: "*"
+          - Sid: Restricted Access for Target Account
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${BuilderVaultAWSAccount}:root
+            Action:
+              - kms:Encrypt
+            Resource: "*"
+          - Sid: Allow Decrypt for Builder Vault
+            Action: kms:Decrypt
+            Condition:
+              StringEqualsIgnoreCase:
+                kms:RecipientAttestation:PCR8: !Ref BlockdaemonPCR8
+              StringEquals:
+                aws:PrincipalTag/EnclaveName: !Sub node-${NodeIndex}
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${BuilderVaultAWSAccount}:root
+            Resource: "*"
+  NodeAdminBucket:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${Namespace}-${AWS::AccountId}-${AWS::Region}-node-${NodeIndex}-bucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: config.toml
+            Function: !GetAtt SignatureFunction.Arn
+  NodeSecretManagerKMSKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS Key for encrypting secrets manager secrets. This is only used for secrets manager cross account access.
+      EnableKeyRotation: true
+      Enabled: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: account-permissions
+        Statement:
+          - Sid: Enable Access for Root
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - kms:*
+            Resource: "*"
+          - Sid: Restricted Access for Target Account
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${BuilderVaultAWSAccount}:root
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Sub ${BuilderVaultAWSAccount}
+                kms:ViaService: !Sub secretsmanager.${AWS::Region}.amazonaws.com
+  NodeAdminBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref NodeAdminBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CrossAccountConfigAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${BuilderVaultAWSAccount}:root
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+            Resource:
+              - !Sub "${NodeAdminBucket.Arn}/node-${NodeIndex}/config.toml"
+          - Sid: AuditLogs
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${BuilderVaultAWSAccount}:root
+            Action:
+              - s3:PutObject
+            Resource:
+              - !Sub "${NodeAdminBucket.Arn}/node-${NodeIndex}/audit-logs/*"
+  NodeBootstrapParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/blockdaemon/${Namespace}/node-bootstrap-parameter-${NodeIndex}"
+      Tier: Advanced
+      Type: String
+      # value will be a json string of the KMS key id, the secrets manager location of the api keys, and the secrets manager location of the master encryption key
+      Value: !Sub >
+        {
+          "NITRO_KMS_KEY_ID": "${NodeKMSKeyNitro.Arn}",
+          "CONFIG_BUCKET": "${NodeAdminBucket}",
+          "DB_ENCRYPTOR_MASTER_PASSWORD_SECRET_ARN": "${NodeMasterEncryptionKey}",
+          "NODE_KMS_KEY_SECRETS_MANAGER_ARN": "${NodeSecretManagerKMSKey.Arn}",
+          "SIGNING_KEY_SECRET": "${NodeSigningKey}",
+          "AUDIT_LOG_BUCKET": "${NodeAdminBucket}",
+          "API_KEY_SECRET_ARN": "${NodeAPIKey}",
+          "API_KEY_HASH_SECRET_ARN": "${NodeAPIKeyHash}"
+        }
+  NodeSSMParameterShare:
+    Type: AWS::RAM::ResourceShare
+    Properties:
+      Name: !Sub "${Namespace}-node-ssm-parameter-share-${NodeIndex}"
+      Principals:
+        - !Ref BuilderVaultAWSAccount
+      ResourceArns:
+        - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NodeBootstrapParameter}"
+      AllowExternalPrincipals: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${Namespace}-node-ssm-parameter-share"
+  NodeAPIKeyHash:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Properties:
+      Name: !Sub "builder-vault-${Namespace}-secret-api-key-hash-node-${NodeIndex}"
+      Description: "KMS Encrypted API Key Hash for builder vault. This is the hashed key for usage on the tsm node."
+      KmsKeyId: !Ref NodeSecretManagerKMSKey
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+  NodeAPIKeyHashResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref NodeAPIKeyHash
+      ResourcePolicy: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "${BuilderVaultAWSAccount}"
+              },
+              "Action": [
+                "secretsmanager:GetSecretValue"
+              ],
+              "Resource": "${NodeAPIKeyHash}",
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalTag/EnclaveName": "node-${NodeIndex}"
+                }
+              }
+            }
+          ]
+        }
+  NodeAPIKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "builder-vault-${Namespace}-secret-api-keys-node-${NodeIndex}"
+      Description: !Sub "API Key for builder vault node ${NodeIndex}"
+      KmsKeyId: !Ref NodeSecretManagerKMSKey
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+  NodeAPIKeySecretResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref NodeAPIKey
+      ResourcePolicy: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "${BuilderVaultAWSAccount}"
+              },
+              "Action": [
+                "secretsmanager:UpdateSecret"
+              ],
+              "Resource": "${NodeAPIKey}",
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalTag/EnclaveName": "node-${NodeIndex}"
+                }
+              }
+            }
+          ]
+        }
+  NodeMasterEncryptionKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "builder-vault-${Namespace}-master-encryption-key-node-${NodeIndex}"
+      Description: !Sub DB master encryptor password for builder vault node ${NodeIndex}"
+      KmsKeyId: !Ref NodeSecretManagerKMSKey
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+        - Key: Namespace
+          Value: !Sub ${Namespace}
+        - Key: NodeIndex
+          Value: !Sub ${NodeIndex}
+  NodeMasterEncryptionKeySecretResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref NodeMasterEncryptionKey
+      ResourcePolicy: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "${BuilderVaultAWSAccount}"
+              },
+              "Action": [
+                "secretsmanager:UpdateSecret",
+                "secretsmanager:GetSecretValue"
+              ],
+              "Resource": "${NodeMasterEncryptionKey}",
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalTag/EnclaveName": "node-${NodeIndex}"
+                }
+              }
+            }
+          ]
+        }
+  NodeSigningKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "builder-vault-${Namespace}-secret-signing-key-node-${NodeIndex}"
+      Description: !Sub "Signing Key for builder vault node ${NodeIndex}"
+      KmsKeyId: !Ref NodeSecretManagerKMSKey
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+  NodeSigningKeySecretResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref NodeSigningKey
+      ResourcePolicy: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "${BuilderVaultAWSAccount}"
+              },
+              "Action": [
+                "secretsmanager:GetSecretValue"
+              ],
+              "Resource": "${NodeSigningKey}",
+              "Condition": {
+                "StringEquals": {
+                  "aws:PrincipalTag/EnclaveName": "node-${NodeIndex}"
+                }
+              }
+            }
+          ]
+        }
+  APIKeyCustomResource:
+    Type: Custom::TsmNodeKeys
+    Properties:
+      ServiceToken: !Sub ${BuilderVaultAPIKeyCreatorFunction.Arn}
+      NodeAPIKeySecretArn: !Sub ${NodeAPIKey}
+      NodeAPIKeyHashSecretArn: !Sub ${NodeAPIKeyHash}
+      NitroKMSKeyId: !Sub ${NodeKMSKeyNitro.Arn}
+      SigningKeySecretArn: !Sub ${NodeSigningKey}
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SignatureFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub arn:aws:s3:::${Namespace}-${AWS::AccountId}-${AWS::Region}-node-${NodeIndex}-bucket
+  SignatureFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BuilderVaultAPIKeyCreatorFunctionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:ListRoles
+                  - iam:ListUsers
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                  - kms:DescribeKey
+                  - kms:ReEncrypt*
+                Resource:
+                  - !Sub ${NodeKMSKeyNitro.Arn}
+                  - !Sub ${NodeSecretManagerKMSKey.Arn}
+              - Effect: Allow
+                Action:
+                  - s3:GetObject*
+                  - s3:PutObject*
+                Resource: !Sub arn:aws:s3:::${Namespace}-${AWS::AccountId}-${AWS::Region}-node-${NodeIndex}-bucket/node-${NodeIndex}/config.toml
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub ${NodeSigningKey}
+  SignatureFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt SignatureFunctionRole.Arn
+      Runtime: python3.11
+      Environment:
+        Variables:
+          NITRO_KMS_KEY: !Sub ${NodeKMSKeyNitro.Arn}
+          SIGNING_KEY_SECRET: !Sub ${NodeSigningKey}
+      Timeout: 20
+      Code:
+        ZipFile: |
+          import boto3
+          import logging
+          import hmac
+          import os
+          import base64
+          from hashlib import sha256
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+
+
+          s3_client = boto3.client("s3")
+          kms_client = boto3.client("kms")
+          secret_client = boto3.client("secretsmanager")
+          iam_client = boto3.client("iam")
+
+
+          def lambda_handler(event, _):
+              LOGGER.info(f"Received event: {event}")
+              NITRO_KMS_KEY = os.environ["NITRO_KMS_KEY"]
+              SIGNING_KEY_SECRET = os.environ["SIGNING_KEY_SECRET"]
+              bucket = event["Records"][0]["s3"]["bucket"]["name"]
+              key = event["Records"][0]["s3"]["object"]["key"]
+              principal_id = event["Records"][0]["userIdentity"]["principalId"]
+              unique_identifier = principal_id.split(":")[1]
+              if should_add_signature(unique_identifier):
+                  LOGGER.info(
+                      "TOML file was dropped from this account - adding signature metadata"
+                  )
+                  s3_response = s3_client.get_object(Bucket=bucket, Key=key)
+                  LOGGER.info(f"S3 get object response: {s3_response}")
+                  if "Metadata" not in s3_response or "signature" not in s3_response["Metadata"]:
+                      signing_key_secret_response = secret_client.get_secret_value(
+                          SecretId=SIGNING_KEY_SECRET
+                      )
+                      LOGGER.info(f"Get secret response: {signing_key_secret_response}")
+
+                      decrypt_response = kms_client.decrypt(
+                          CiphertextBlob=base64.b64decode(
+                              signing_key_secret_response["SecretString"]
+                          ),
+                          KeyId=NITRO_KMS_KEY,
+                      )
+                      LOGGER.info(f"Decrypt response: {decrypt_response}")
+
+                      signing_key = decrypt_response["Plaintext"]
+
+                      body = s3_response["Body"].read()
+
+                      signature = hmac.new(signing_key, body, sha256).hexdigest()
+
+                      s3_put_response = s3_client.put_object(
+                          Body=body,
+                          Bucket=bucket,
+                          Key=key,
+                          Metadata={"signature": signature},
+                      )
+                      LOGGER.info(f"S3 put object response: {s3_put_response}")
+
+
+          def should_add_signature(unique_identifier):
+              add_signature = False
+              if unique_identifier.startswith("AROA"):
+                  add_signature = does_role_exist(unique_identifier)
+              elif unique_identifier.startswith("AIDA"):
+                  add_signature = does_user_exist(unique_identifier)
+              return add_signature
+
+
+          def does_role_exist(unique_identifier):
+              paginator = iam_client.get_paginator("list_roles")
+              collector = []
+              list(map(collector.extend, [x["Roles"] for x in paginator.paginate()]))
+              for role in collector:
+                  if role["RoleId"] == unique_identifier:
+                      return True
+              return False
+
+
+          def does_user_exist(unique_identifier):
+              paginator = iam_client.get_paginator("list_users")
+              collector = []
+              list(map(collector.extend, [x["Users"] for x in paginator.paginate()]))
+              for role in collector:
+                  if role["UserId"] == unique_identifier:
+                      return True
+              return False
+
+  BuilderVaultAPIKeyCreatorFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BuilderVaultAPIKeyCreatorFunctionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                  - kms:DescribeKey
+                  - kms:ReEncrypt
+                Resource:
+                  - !Sub ${NodeKMSKeyNitro.Arn}
+                  - !Sub ${NodeSecretManagerKMSKey.Arn}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:PutSecretValue
+                Resource:
+                  - !Sub ${NodeAPIKey}
+                  - !Sub ${NodeAPIKeyHash}
+                  - !Sub ${NodeSigningKey}
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+  BuilderVaultAPIKeyCreatorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt BuilderVaultAPIKeyCreatorFunctionRole.Arn
+      Runtime: python3.11
+      Timeout: 20
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import logging
+          import base64
+          from hashlib import sha256
+          import uuid
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+
+          secret_client = boto3.client("secretsmanager")
+          kms_client = boto3.client("kms")
+
+
+          def lambda_handler(event, context):
+              LOGGER.info(f"Received api key generation event: {event}")
+              resource_properties = event.get("ResourceProperties", None)
+              if event["RequestType"] == "Delete":
+                  LOGGER.info("DELETE! (noop)")
+                  cfnresponse.send(
+                      event, context, "SUCCESS", {"Message": "Resource deletion successful!"}
+                  )
+                  return
+              elif event["RequestType"] == "Update":
+                  LOGGER.info("UPDATE! (noop)")
+                  cfnresponse.send(
+                      event, context, "SUCCESS", {"Message": "Resource update successful!"}
+                  )
+              elif event["RequestType"] == "Create":
+                  LOGGER.info("CREATE!")
+                  signing_key_secret_arn = resource_properties["SigningKeySecretArn"]
+                  api_key_secret_arn = resource_properties["NodeAPIKeySecretArn"]
+                  api_key_hash_secret_arn = resource_properties["NodeAPIKeyHashSecretArn"]
+                  nitro_kms_key = resource_properties["NitroKMSKeyId"]
+
+                  # create API key and API key hash
+                  api_key = str(uuid.uuid4())
+                  api_key_hash = base64.b64encode(sha256(api_key.encode("utf-8")).digest())
+                  response = kms_client.encrypt(KeyId=nitro_kms_key, Plaintext=api_key_hash)
+                  encrypted_api_key_hash = base64.b64encode(response["CiphertextBlob"])
+                  secret_client.put_secret_value(
+                      SecretId=api_key_secret_arn, SecretString=api_key
+                  )
+                  secret_client.put_secret_value(
+                      SecretId=api_key_hash_secret_arn,
+                      SecretString=encrypted_api_key_hash.decode(),
+                  )
+
+                  # create signing key
+                  signing_key_response = kms_client.generate_data_key(
+                      KeyId=nitro_kms_key, KeySpec="AES_256"
+                  )
+                  # decode response and turn into string
+                  decoded_signing_key_response = base64.b64encode(
+                      signing_key_response["CiphertextBlob"]
+                  )
+                  secret_client.put_secret_value(
+                      SecretId=signing_key_secret_arn,
+                      SecretString=decoded_signing_key_response.decode(),
+                  )
+                  cfnresponse.send(
+                      event, context, "SUCCESS", {"Message": "Resource create successful!"}
+                  )
+
+
+Outputs:
+  SSMParameter:
+    Description: The SSM Parameter for the Builder Vault to consume
+    Value: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NodeBootstrapParameter}"
+  BuilderVaultNamespace:
+    Description: The namespace of the Builder Vault
+    Value: !Ref Namespace
+  NodeAPIKey:
+    Description: The API Key that you use to access your builder vault node
+    Value: !Ref NodeAPIKey

@@ -1,0 +1,922 @@
+---
+Parameters:
+  DeletePolicy:
+    Type: String
+    Default: Retain
+    AllowedValues:
+    - Delete
+    - Retain
+    Description: The policy to apply when the stack is deleted. Only use Delete if you
+      want to delete the resources created by this stack. Retain will keep the resources
+      and you will have to manually delete them.
+  CoreNodesStackName:
+      Description: Name of an active Builder Vault core node CloudFormation stack that you wish to add this additional node to
+      Type: String
+      MinLength: 1
+      MaxLength: 255
+      AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9]*$"
+  NodeIndex:
+    Type: String
+    Description: The index of the additional node being added to the Builder Vault. Cannot be an index that exists already within the existing Builder Vault.
+    AllowedPattern: ^(?:[3-9]|\d\d\d*)$
+  NodeSSMParameter:
+    Type: String
+    Description: The SSM parameter name for the Builder Vault node.  The KMS stack for this node index needs to be deployed before this parameter can be input, and the index must match the node. For more information, please check https://builder-vault-tsm.docs.blockdaemon.com/docs/getting-started-aws#deploy-additional-dynamic-builder-vault-nodes
+    AllowedPattern: "arn:aws:ssm:[a-zA-Z0-9-]+:\\d{12}:parameter/[a-zA-Z0-9/_-]+"
+  BuilderVaultInstanceType:
+    Type: String
+    AllowedValues:
+    - c6i.2xlarge
+    - c6i.xlarge
+    - m6i.2xlarge
+    - m6i.xlarge
+    - r6i.2xlarge
+    - r6i.xlarge
+    Default: c6i.xlarge
+    Description: The instance type to use for the Builder Vault nodes (if left blank will default to core node instance type)
+Mappings:
+  BuilderVaultAMI:
+    us-west-2:
+      AMIId: ami-081afad60c4c199a3
+    us-west-1:
+      AMIId: ami-0c41748f122b0eba6
+    us-east-2:
+      AMIId: ami-0edfee0f691760706
+    us-east-1:
+      AMIId: ami-0ce329f06e9e6d336
+    sa-east-1:
+      AMIId: ami-0b752357169f8300b
+    me-south-1:
+      AMIId: ami-0b71f1f37be47a309
+    eu-west-3:
+      AMIId: ami-0cffddb378e778a0a
+    eu-west-2:
+      AMIId: ami-0949d7ab576f573f4
+    eu-west-1:
+      AMIId: ami-0df003c46c4ec82df
+    eu-south-1:
+      AMIId: ami-0cdda6a4b15f32e03
+    eu-north-1:
+      AMIId: ami-0b9f1196236efe919
+    eu-central-1:
+      AMIId: ami-076e3ec70b4986fa6
+    ca-central-1:
+      AMIId: ami-0b031930f459ef56e
+    ap-southeast-2:
+      AMIId: ami-0fc84c79302ab60ce
+    ap-southeast-1:
+      AMIId: ami-0fa632748114865c4
+    ap-south-1:
+      AMIId: ami-085b0a52ad6a75060
+    ap-northeast-3:
+      AMIId: ami-0fde6bb257b1db221
+    ap-northeast-2:
+      AMIId: ami-0c00a15c30d974c3a
+    ap-northeast-1:
+      AMIId: ami-00e0cfa986c947db3
+  InstanceMappings:
+    c6i.2xlarge:
+      TotalMemory: 16384
+      TotalCpu: 8
+      NitroCPUCount: 6
+      NitroMemory: 12288
+    c6i.xlarge:
+      TotalMemory: 8192
+      TotalCpu: 4
+      NitroCPUCount: 2
+      NitroMemory: 4096
+    m6i.2xlarge:
+      TotalMemory: 32768
+      TotalCpu: 8
+      NitroCPUCount: 6
+      NitroMemory: 28672
+    m6i.xlarge:
+      TotalMemory: 16384
+      TotalCpu: 4
+      NitroCPUCount: 2
+      NitroMemory: 12288
+    r6i.2xlarge:
+      TotalMemory: 65536
+      TotalCpu: 8
+      NitroCPUCount: 6
+      NitroMemory: 61440
+    r6i.xlarge:
+      TotalMemory: 32768
+      TotalCpu: 4
+      NitroCPUCount: 2
+      NitroMemory: 28672
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Required parameters
+        Parameters:
+          - CoreNodesStackName
+          - NodeIndex
+      - Label:
+          default: Your KMS stack SSMParameter output
+        Parameters:
+          - NodeSSMParameter
+      - Label:
+          default: Builder Vault configuration
+        Parameters:
+          - BuilderVaultInstanceType
+    ParameterLabels:
+      CoreNodesStackName:
+        default: AWS Cloudformation stack name for Builder Vault core nodes
+      NodeSSMParameter:
+        default: SSMParameter outputs of your KMS stack for this node
+      NodeIndex:
+        default: Index of the additional node being added - Cannot be index 0,1,2 (reserved for embedded nodes and core nodes)
+      BuilderVaultInstanceType:
+        default: Builder Vault Node Instance Type
+Resources:
+  NodeNLBRecordset:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !Sub dualstack.${NodeNLB.DNSName}
+        HostedZoneId: !GetAtt NodeNLB.CanonicalHostedZoneID
+      HostedZoneId:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-HostedZoneId"
+      Name: !Sub
+        - node-${NodeIndex}-p2p-${Namespace}.${HostedZoneName}
+        - Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+          HostedZoneName: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-HostedZoneName
+      SetIdentifier: !Sub node-${NodeIndex}-${NodeNLB.LoadBalancerName}
+      Type: A
+      Weight: 100
+  NodeNLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      LoadBalancerAttributes:
+      - Key: deletion_protection.enabled
+        Value: 'false'
+      - Key: load_balancing.cross_zone.enabled
+        Value: 'true'
+      Scheme:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-NLBScheme"
+      SecurityGroups:
+        - Fn::ImportValue: !Sub "${CoreNodesStackName}-NLBSecurityGroup"
+      Subnets:
+        - Fn::ImportValue: !Sub "${CoreNodesStackName}-NLBSubnet1"
+        - Fn::ImportValue: !Sub "${CoreNodesStackName}-NLBSubnet2"
+  NodeNLBTarget:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPort: '9000'
+      HealthCheckProtocol: TCP
+      Name: !Sub TG${NodeIndex}-${NodeNLB.LoadBalancerName}
+      Port: 9000
+      Protocol: TCP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '30'
+      - Key: proxy_protocol_v2.enabled
+        Value: 'false'
+      TargetType: instance
+      Targets:
+      - Id: !Ref Node
+        Port: 9000
+      VpcId:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-VpcId"
+  NodeNLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref NodeNLBTarget
+        Type: forward
+      LoadBalancerArn: !Ref NodeNLB
+      Port: 9000
+      Protocol: TCP
+  ALB443CertNode:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub
+        - "node-${NodeIndex}-${Namespace}.${HostedZoneName}"
+        - Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+          HostedZoneName: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-HostedZoneName
+      DomainValidationOptions:
+      - DomainName: !Sub
+        - "node-${NodeIndex}-${Namespace}.${HostedZoneName}"
+        - Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+          HostedZoneName: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-HostedZoneName
+        HostedZoneId:
+          Fn::ImportValue: !Sub "${CoreNodesStackName}-HostedZoneId"
+      ValidationMethod: DNS
+  ALBListener443DefaultCertNodes:
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Properties:
+      Certificates:
+      - CertificateArn: !Ref ALB443CertNode
+      ListenerArn:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-ALBListenerArn"
+  RecordSetNode:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName:
+          Fn::ImportValue: !Sub "${CoreNodesStackName}-ALBDnsName"
+        HostedZoneId:
+          Fn::ImportValue: !Sub "${CoreNodesStackName}-ALBCanonicalHostedZoneID"
+      HostedZoneId:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-HostedZoneId"
+      Name: !Sub
+        - "node-${NodeIndex}-${Namespace}.${HostedZoneName}"
+        - Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+          HostedZoneName: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-HostedZoneName
+      SetIdentifier: !Sub
+        - "node-${NodeIndex}-${ALBName}"
+        - ALBName: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-ALBName
+      Type: A
+      Weight: 100
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: |
+        The IAM role for Builder Vault node instance profile. The nodes will have a default policy that will include the permissions for SSM parameters on bootstrapping configuration,
+        as well as cloudformation signals. Additionally, SSM Managed Instance Core and CloudWatchAgentServerPolicy are attached to the role for metrics and connecting to the Nodes via SSM.
+        There will be an additional policy attached per node that will allow the Builder Vault node to access logs, secrets for its resources, and the KMS key for the Nitro Enclave.
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+      - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      - !Sub arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy
+      Tags:
+      - Key: EnclaveName
+        Value: !Sub node-${NodeIndex}
+  NodePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Action:
+          - cloudformation:DescribeStackResource
+          - cloudformation:SignalResource
+          Effect: Allow
+          Resource: !Ref AWS::StackId
+        - Action:
+          - ssm:GetParameter
+          Effect: Allow
+          Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+          Condition:
+            StringEquals:
+              ssm:resourceTag/aws:cloudformation:stack-name: !Sub ${AWS::StackName}
+        - Sid: AllowGetSecretsCoreStack
+          Action:
+          - secretsmanager:GetSecretValue
+          Effect: Allow
+          Resource: !Sub arn:aws:secretsmanager:*:${AWS::AccountId}:secret:*
+          Condition:
+            StringEquals:
+              secretsmanager:ResourceTag/aws:cloudformation:stack-name: !Ref CoreNodesStackName
+        - Sid: AllowGetOtherNodePublicKeys
+          Action:
+          - secretsmanager:GetSecretValue
+          Effect: Allow
+          Resource: !Sub
+            - "arn:aws:secretsmanager:*:${AWS::AccountId}:secret:${Environ}-${Namespace}-public-key-node-*"
+            - Environ: !ImportValue
+                'Fn::Sub': ${CoreNodesStackName}-Environ
+              Namespace: !ImportValue
+                'Fn::Sub': ${CoreNodesStackName}-Namespace
+        - Sid: AllowSecretUpdatesThisAccount
+          Action:
+          - secretsmanager:GetSecretValue
+          - secretsmanager:UpdateSecret
+          Condition:
+            StringEquals:
+              secretsmanager:ResourceTag/aws:cloudformation:stack-id: !Sub "${AWS::StackId}"
+          Effect: Allow
+          Resource: "*"
+        - Sid: AllowGetSecretsKMSAccount
+          Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+          Resource:
+            - Fn::Sub:
+                - arn:aws:secretsmanager:*:${NodeKmsAccount}:secret:*
+                - NodeKmsAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref NodeSSMParameter]
+        - Sid: AllowSecretUpdatesKmsAccount
+          Effect: Allow
+          Action:
+            - secretsmanager:UpdateSecret
+          Condition:
+            ForAllValues:StringEquals:
+              secretsmanager:ResourceTag/Namespace: !ImportValue
+                'Fn::Sub': ${CoreNodesStackName}-Namespace
+              secretsmanager:ResourceTag/NodeIndex: !Sub ${NodeIndex}
+          Resource:
+            - Fn::Sub:
+                - arn:aws:secretsmanager:*:${NodeKmsAccount}:secret:*
+                - NodeKmsAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref NodeSSMParameter]
+        - Sid: KeyAccessForKMSAccount
+          Action:
+          - kms:Decrypt
+          - kms:Encrypt
+          - kms:GenerateDataKey*
+          - kms:ReEncrypt*
+          Effect: Allow
+          Resource:
+            Fn::Sub:
+              - arn:aws:kms:*:${NodeKmsAccount}:key/*
+              - NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref NodeSSMParameter]
+        - Sid: KMSForThisAccount
+          Action:
+          - kms:Decrypt
+          - kms:Encrypt
+          - kms:GenerateDataKey*
+          - kms:ReEncrypt*
+          Condition:
+            ForAnyValue:StringLike:
+              kms:ResourceAliases:
+              - !Sub
+                - "alias/blockdaemon-${Environ}-${Namespace}"
+                - Environ: !ImportValue
+                    'Fn::Sub': ${CoreNodesStackName}-Environ
+                  Namespace: !ImportValue
+                    'Fn::Sub': ${CoreNodesStackName}-Namespace
+          Effect: Allow
+          Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
+        - Sid: SSMAccessKMSAccount
+          Action:
+            - ssm:GetParameter
+          Effect: Allow
+          Resource: !Sub ${NodeSSMParameter}
+        - Action:
+          - cloudformation:Describe*
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:DescribeLogStreams
+          - logs:PutLogEvents
+          - s3:ListBucket*
+          - secretsmanager:ListSecrets
+          Effect: Allow
+          Resource: "*"
+        - Action:
+          - s3:GetObject*
+          Effect: Allow
+          Resource:
+            - Fn::Sub:
+              - arn:aws:s3:::${Namespace}-${NodeKmsAccount}-${NodeKmsRegion}-node-${NodeIndex}-bucket/node-${NodeIndex}/config.toml
+              - Namespace: !ImportValue
+                    'Fn::Sub': ${CoreNodesStackName}-Namespace
+                NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref NodeSSMParameter]
+                NodeKmsRegion:
+                  Fn::Select:
+                    - 3
+                    - Fn::Split: [":", !Ref NodeSSMParameter]
+          Condition:
+            StringEquals:
+              s3:ResourceAccount:
+                Fn::Sub:
+                  - "${NodeKmsAccount}"
+                  - NodeKmsAccount:
+                      Fn::Select:
+                        - 4
+                        - Fn::Split: [":", !Ref NodeSSMParameter]
+        - Action:
+          - s3:PutObject*
+          Effect: Allow
+          Resource:
+            - Fn::Sub:
+              - arn:aws:s3:::${Namespace}-${NodeKmsAccount}-${NodeKmsRegion}-node-${NodeIndex}-bucket/node-${NodeIndex}/*
+              - Namespace: !ImportValue
+                    'Fn::Sub': ${CoreNodesStackName}-Namespace
+                NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref NodeSSMParameter]
+                NodeKmsRegion:
+                  Fn::Select:
+                    - 3
+                    - Fn::Split: [":", !Ref NodeSSMParameter]
+          Condition:
+            StringEquals:
+              s3:ResourceAccount:
+                Fn::Sub:
+                  - "${NodeKmsAccount}"
+                  - NodeKmsAccount:
+                      Fn::Select:
+                        - 4
+                        - Fn::Split: [":", !Ref NodeSSMParameter]
+        Version: '2012-10-17'
+      PolicyName: !Sub "Node${NodeIndex}Policy"
+      Roles:
+      - !Ref NodeInstanceRole
+  NodeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpTokens: required
+          HttpPutResponseHopLimit: 2
+          InstanceMetadataTags: enabled
+  NodeSecretPrivateKey:
+    Type: AWS::SecretsManager::Secret
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      KmsKeyId:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-BuilderVaultKmsKeyARN"
+      Name: !Sub
+        - "${Environ}-${Namespace}-private-key-node-${NodeIndex}"
+        - Environ: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Environ
+          Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+      - Key: node-index
+        Value: !Sub ${NodeIndex}
+      - Key: tsm-type
+        Value: static
+  NodeSecretPublicKey:
+    Type: AWS::SecretsManager::Secret
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      KmsKeyId:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-BuilderVaultKmsKeyARN"
+      Name: !Sub
+        - "${Environ}-${Namespace}-public-key-node-${NodeIndex}"
+        - Environ: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Environ
+          Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+      - Key: node-index
+        Value: !Sub ${NodeIndex}
+      - Key: tsm-type
+        Value: static
+  NodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - !Ref NodeInstanceRole
+  NodeConfigSSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub
+        - "/${Environ}/${Namespace}/node-${NodeIndex}/default-tsm-config"
+        - Environ: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Environ
+          Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+      Type: String
+      Value:
+        Fn::Sub:
+          - |
+            {
+              "NAMESPACE": "${Namespace}",
+              "NODE_NAME": "node-${NodeIndex}",
+              "NODE_INDEX": "${NodeIndex}",
+              "ENVIRON": "${Environ}",
+              "DB_DRIVER": "postgres",
+              "PRIVATE_KEY_SECRET_ARN": "${NodeSecretPrivateKey}",
+              "PUBLIC_KEY_SECRET_ARN": "${NodeSecretPublicKey}",
+              "TSM_TYPE": "static",
+              "DB_SECRET_ARN": "${DbSecretArn}",
+              "NODE_SSM_PARAM_ARN": "${NodeSSMParameter}"
+            }
+          - Namespace: !ImportValue
+              'Fn::Sub': ${CoreNodesStackName}-Namespace
+            Environ: !ImportValue
+              'Fn::Sub': ${CoreNodesStackName}-Environ
+            DbSecretArn: !ImportValue
+              'Fn::Sub': ${CoreNodesStackName}-DbSecret
+  CloudMapServiceNode:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: !Sub
+        - "${Environ}-${Namespace}-node-${NodeIndex} service for Builder Vault"
+        - Environ: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Environ
+          Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      Name: !Sub node-${NodeIndex}
+      NamespaceId:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-CloudmapNamespace"
+      Tags:
+        - Key: tsm-type
+          Value: static
+        - Key: node-index
+          Value: !Sub ${NodeIndex}
+  CloudMapServiceInstanceNode:
+    Type: AWS::ServiceDiscovery::Instance
+    Properties:
+      InstanceAttributes:
+        TSM_TYPE: "static"
+        NODE_INDEX: !Sub ${NodeIndex}
+        AWS_INSTANCE_IPV4: !Sub "${Node.PrivateIp}"
+      InstanceId: !Ref Node
+      ServiceId: !Ref CloudMapServiceNode
+  Node:
+    Type: AWS::EC2::Instance
+    Properties:
+      EnclaveOptions:
+        Enabled: true
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      ImageId: !FindInMap [BuilderVaultAMI, !Ref 'AWS::Region', AMIId]
+      InstanceType: !Ref BuilderVaultInstanceType
+      LaunchTemplate:
+        LaunchTemplateId: !GetAtt NodeLaunchTemplate.LaunchTemplateId
+        Version: !Sub ${NodeLaunchTemplate.LatestVersionNumber}
+      PropagateTagsToVolumeOnCreation: true
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "${CoreNodesStackName}-NodeSecurityGroup"
+      SubnetId:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-PrivateSubnet1"
+      Tags:
+      - Key: CONFIG_SSM_PARAM
+        Value: !Ref NodeConfigSSMParameter
+      - Key: EnclaveName
+        Value: !Sub node-${NodeIndex}
+      - Key: Name
+        Value: !Sub
+          - "${Environ}-${Namespace}-node-${NodeIndex}"
+          - Environ: !ImportValue
+              'Fn::Sub': ${CoreNodesStackName}-Environ
+            Namespace: !ImportValue
+              'Fn::Sub': ${CoreNodesStackName}-Namespace
+      UserData:
+        Fn::Base64: !Sub
+          |
+          #!/bin/bash
+          echo "Starting Builder Vault Node ${NodeIndex}"
+          /opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource Node -c default
+          /opt/aws/bin/cfn-signal -e $? --region ${AWS::Region} --stack ${AWS::StackName} --resource Node
+          cat /var/log/cfn-init.log >&2
+    DependsOn:
+    - NodePolicy
+    - NodeInstanceRole
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default:
+          - SetupCfnHup
+          - Nitro
+          update:
+          - SetupCfnHup
+          - Nitro
+        Nitro:
+          files:
+            "/params.sh":
+              content:
+                Fn::Sub:
+                - |
+                  #!/bin/bash
+                  export BASE_PATH=/app
+                  export NAME=${Name}
+                  export NAMESPACE=${Namespace}
+                  export DIMENSIONS="--dimensions Environment=${Environ},Index=${Name},Namespace=${Namespace}"
+                  export NITRO_CPU_COUNT=${NitroCPUCount}
+                  export NITRO_MEMORY=${NitroMemory}
+                  export NITRO_ALLOCATED_MEMORY=${NitroMemory}
+                  export NITRO_ALLOCATED_CPU=${NitroCPUCount}
+                  export CLOUDWATCH_PARAM_NAME=${CloudwatchConfigParameter}
+                  export HEALTH_CHECK_PATH=/ping
+                  export HEALTH_CHECK_PORT=8080
+                  export APPLICATION_PORT=8080
+                - NitroCPUCount: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroCPUCount]
+                  NitroMemory: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroMemory]
+                  Name: node-${NodeIndex}
+                  Namespace: !ImportValue
+                    'Fn::Sub': ${CoreNodesStackName}-Namespace
+                  Environ: !ImportValue
+                    'Fn::Sub': ${CoreNodesStackName}-Environ
+                  CloudwatchConfigParameter: !ImportValue
+                    'Fn::Sub': ${CoreNodesStackName}-CloudwatchConfigParameter
+              encoding: plain
+              mode: '000744'
+              owner: root
+              group: root
+            "/etc/nitro_enclaves/allocator.yaml":
+              content:
+                Fn::Sub:
+                - |2
+
+                  ---
+                  memory_mib: ${NitroMemory}
+                  cpu_count: ${NitroCPUCount}
+                - NitroCPUCount: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroCPUCount]
+                  NitroMemory: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroMemory]
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+          commands:
+            '000':
+              command: "/app/setup-cloudwatch.sh"
+            '001':
+              command: systemctl stop enclave.service
+            '002':
+              command: nitro-cli terminate-enclave --all
+            '003':
+              command: systemctl stop nitro-enclaves-allocator.service
+            '004':
+              command: systemctl start nitro-enclaves-allocator.service
+            '005':
+              command: systemctl start enclave.service
+        SetupCfnHup:
+          files:
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content:
+                Fn::Sub:
+                - |
+                  [cfn-auto-reloader-hook]
+                  triggers=post.update
+                  path=Resources.${LogicalId}.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ${LogicalId} --configsets update --region ${AWS::Region}
+                  runas=root
+                - LogicalId: Node
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+            "/etc/cfn/cfn-hup.conf":
+              content:
+                Fn::Sub: |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+                  interval=1
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                - "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                - "/etc/cfn/cfn-hup.conf"
+        Signal:
+          commands:
+            '000':
+              command:
+                Fn::Sub:
+                - "/opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource
+                  ${LogicalId} --region {AWS::Region}"
+                - LogicalId: Node
+  NodeALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Sub 'TG${NodeIndex}'
+          - Fn::ImportValue: !Sub "${CoreNodesStackName}-ALBName"
+      HealthCheckPath: "/ping"
+      HealthCheckPort: '8080'
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
+      Port: 8080
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '30'
+      - Key: stickiness.enabled
+        Value: 'false'
+      TargetType: instance
+      Targets:
+      - Id: !Ref Node
+        Port: 8080
+      VpcId:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-VpcId"
+  NodeTargetPriorityCustomResource:
+    Type: Custom::NodePriority
+    Properties:
+      ServiceToken: !ImportValue
+        'Fn::Sub': ${CoreNodesStackName}-FlexNodePriorityFunctionARN
+      InternetFacing: !ImportValue
+        'Fn::Sub': ${CoreNodesStackName}-InternetFacing
+      NodeIndex: !Sub ${NodeIndex}
+  DBSnapshotKMsAccessCustomResource:
+    Type: Custom::NodeKmsAccessDbSnapshot
+    Properties:
+      ServiceToken: !ImportValue
+        'Fn::Sub': ${CoreNodesStackName}-FlexNodeKmsAccessFunctionARN
+      AccountId: !Select [4, !Split [":", !Ref NodeSSMParameter]]
+  NodeALBListenerTargetGroupRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - TargetGroupArn: !Ref NodeALBTargetGroup
+        Type: forward
+      Conditions:
+      - Field: host-header
+        HostHeaderConfig:
+          Values:
+          - !Sub
+            - "node-${NodeIndex}-${Namespace}.${HostedZoneName}"
+            - Namespace: !ImportValue
+                'Fn::Sub': ${CoreNodesStackName}-Namespace
+              HostedZoneName: !ImportValue
+                'Fn::Sub': ${CoreNodesStackName}-HostedZoneName
+      ListenerArn:
+        Fn::ImportValue: !Sub "${CoreNodesStackName}-ALBListenerArn"
+      Priority: !GetAtt NodeTargetPriorityCustomResource.Priority
+  Dashboard:
+    Type: "AWS::CloudWatch::Dashboard"
+    Properties:
+      DashboardName: !Sub
+        - "${Namespace}-${Environ}-node-${NodeIndex}"
+        - Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+          Environ: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Environ
+      DashboardBody: !Sub
+        - |
+          {
+            "widgets": [
+                {
+                    "type": "text",
+                    "width": 24,
+                    "height": 1,
+                    "x": 0,
+                    "y": 0,
+                    "properties": {
+                        "markdown": "## Builder Vault Nodes",
+                        "background": "transparent"
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 3,
+                    "height": 4,
+                    "x": 0,
+                    "y": 1,
+                    "properties": {
+                        "view": "singleValue",
+                        "title": "Node-${NodeIndex} Restarts",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "${Namespace}",
+                                "NitroRestart",
+                                "Environment",
+                                "${Environ}",
+                                "Index",
+                                "node-${NodeIndex}",
+                                "Namespace",
+                                "${Namespace}",
+                                {
+                                    "color": "#d62728",
+                                    "stat": "Sum"
+                                }
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 3,
+                    "height": 4,
+                    "x": 3,
+                    "y": 1,
+                    "properties": {
+                        "view": "singleValue",
+                        "title": "Node-${NodeIndex} Status",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "${Namespace}",
+                                "NitroStatus",
+                                "Environment",
+                                "${Environ}",
+                                "Index",
+                                "node-${NodeIndex}",
+                                "Namespace",
+                                "${Namespace}",
+                                {
+                                    "color": "#2ca02c"
+                                }
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 6,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-${NodeIndex} CPU Utilization",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "CPUUtilization",
+                                "InstanceId",
+                                "${Node}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 12,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-${NodeIndex} Network In",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "NetworkIn",
+                                "InstanceId",
+                                "${Node}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 18,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-${NodeIndex} Network Out",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "NetworkOut",
+                                "InstanceId",
+                                "${Node}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                }
+            ]
+          }
+        - Namespace: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Namespace
+          Environ: !ImportValue
+            'Fn::Sub': ${CoreNodesStackName}-Environ
+Outputs:
+  NodeDNS:
+    Description: DNS name for node
+    Value: !Sub
+      - "node-${NodeIndex}-${Namespace}.${HostedZoneName}"
+      - Namespace: !ImportValue
+          'Fn::Sub': ${CoreNodesStackName}-Namespace
+        HostedZoneName: !ImportValue
+          'Fn::Sub': ${CoreNodesStackName}-HostedZoneName

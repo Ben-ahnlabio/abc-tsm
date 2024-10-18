@@ -1,0 +1,3177 @@
+---
+Parameters:
+  DeletePolicy:
+    Type: String
+    Default: Retain
+    AllowedValues:
+    - Delete
+    - Retain
+    Description: The policy to apply when the stack is deleted. Only use Delete if you
+      want to delete the resources created by this stack. Retain will keep the resources
+      and you will have to manually delete them.
+  Environ:
+    Type: String
+    Default: builder-vault
+    Description: Optional environment name to use for the Builder Vault prefix
+    MaxLength: 13
+  Namespace:
+    Type: String
+    Description: A Unique namespace for the Builder Vault.
+    ConstraintDescription: Must be up to 30 characters, and can only include lowercase letters.
+    MaxLength: 30
+    AllowedPattern: "^[a-z]*$"
+  Node1SSMParameter:
+    Type: String
+    Description: The SSM parameter ARN for the Builder Vault node 1.  The KMS stack for node  needs to be deployed before this parameter is populated. For more information, please check https://builder-vault-tsm.docs.blockdaemon.com/docs/getting-started-aws#deploy-kms-stack
+    AllowedPattern: "arn:aws:ssm:[a-zA-Z0-9-]+:\\d{12}:parameter/[a-zA-Z0-9/_-]+"
+  Node2SSMParameter:
+    Type: String
+    Description: The SSM parameter ARN for the Builder Vault node 2.  The KMS stack for node  needs to be deployed before this parameter is populated. For more information, please check https://builder-vault-tsm.docs.blockdaemon.com/docs/getting-started-aws#deploy-kms-stack
+    AllowedPattern: "arn:aws:ssm:[a-zA-Z0-9-]+:\\d{12}:parameter/[a-zA-Z0-9/_-]+"
+  HostedZoneId:
+    Type: String
+    Description: The HostedZoneId to use for the Builder Vault
+    AllowedPattern: "[A-Z0-9]{8,32}"
+  HostedZoneName:
+    Type: String
+    Description: The HostedZoneName to use for the Builder Vault
+    AllowedPattern: "[a-zA-Z0-9.-]{1,50}"
+  DatabaseInstanceType:
+    Type: String
+    Default: r6g.large
+    AllowedValues:
+    - r6g.2xlarge
+    - r6g.large
+    - r6g.xlarge
+    - r6i.2xlarge
+    - r6i.large
+    - r6i.xlarge
+    - t4g.medium
+    Description: The instance type to use for the database. Will prefix the instance
+      class with `db.`
+  DatabaseEngineVersion:
+    Type: String
+    Default: '15.3'
+    Description: The engine version to use for the database
+  EnableDatbaseSnapshotSharing:
+    Type: String
+    Default: true
+    AllowedValues:
+    - true
+    - false
+    Description: Whether or not to automatically take and share DB snapshots with KMS stack accounts
+  DatabaseSnapshotFrequencyDays:
+    Type: String
+    Default: '30'
+    Description: The frequency in days to take and share DB snapshots with KMS stack accounts
+    AllowedPattern: ^[1-9][0-9]*$
+  BuilderVaultInstanceType:
+    Type: String
+    Default: c6i.xlarge
+    AllowedValues:
+    - c6i.2xlarge
+    - c6i.xlarge
+    - m6i.2xlarge
+    - m6i.xlarge
+    - r6i.2xlarge
+    - r6i.xlarge
+    Description: The instance type to use for the Builder Vault nodes
+  VpcCidr:
+    Type: String
+    Description: The CIDR block to use for the VPC
+    Default: 10.0.0.0/24
+  VpcCidrBlockPublicSubnet1:
+    Type: String
+    Description: The CIDR block to use for the public subnet 1
+    Default: 10.0.0.0/26
+  VpcCidrBlockPublicSubnet2:
+    Type: String
+    Description: The CIDR block to use for the public subnet 2
+    Default: 10.0.0.64/26
+  VpcCidrBlockPrivateSubnet1:
+    Type: String
+    Description: The CIDR block to use for the private subnet 1
+    Default: 10.0.0.128/26
+  VpcCidrBlockPrivateSubnet2:
+    Type: String
+    Description: The CIDR block to use for the private subnet 2
+    Default: 10.0.0.192/26
+  InternetFacing:
+    Type: String
+    Default: true
+    AllowedValues:
+    - true
+    - false
+    Description: Whether or not the load balancer to be internet facing.
+  CidrAllowP2p:
+    Type: String
+    Description: The CIDR block to allow access to the Builder Vault P2P port 9000 for embedded nodes. Please set CIDR to x.x.x.x/32 to allow one specific IP address access, 0.0.0.0/0 to allow all IP addresses access, or another CIDR range
+    AllowedPattern: (?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])\.(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])\.(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])\.(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])/(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])
+    ConstraintDescription: must be a valid IPv4 cidr value in format x.x.x.x/x 
+  CidrAllowSdk:
+    Type: String
+    Description: The CIDR block to allow access to the Builder Vault SDK port 443. Please set CIDR to x.x.x.x/32 to allow one specific IP address access, 0.0.0.0/0 to allow all IP addresses access, or another CIDR range
+    AllowedPattern: (?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])\.(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])\.(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])\.(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])/(?:1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])
+    ConstraintDescription: must be a valid IPv4 cidr value in format x.x.x.x/x 
+  ExistingVpcId:
+    Type: String
+    Description: Must be in vpcid format (vpc-1234567890). The ID of an existing VPC to use. Must exist in the account and not be a shared vpc. If specified, a new VPC will not be created. The VPC must belong to the AWS account and have NAT gateway. If you have specific
+            network security requirements, please contact Blockdaemon sales.
+    Default: ''
+  ExistingPrivateSubnetId1:
+    Type: String
+    Description: The IDs of existing private subnets to use. Must be in the format (subnet-1234567890).
+    Default: ''
+  ExistingPrivateSubnetId2:
+    Type: String
+    Description: The IDs of existing private subnets to use. Must be in the format (subnet-1234567890).
+    Default: ''
+  ExistingPublicSubnetId1:
+    Type: String
+    Description: The IDs of existing public subnets to use. Must be in the format (subnet-1234567890).
+    Default: ''
+  ExistingPublicSubnetId2:
+    Type: String
+    Description: The IDs of existing public subnets to use. Must be in the format (subnet-1234567890).
+    Default: ''
+Conditions:
+  InternetFacing:
+    !Equals [!Ref InternetFacing, true]
+  CreateVpc:
+    !Equals [!Ref ExistingVpcId, '']
+  BackupsEveryDay:
+    !Equals [!Ref DatabaseSnapshotFrequencyDays, '1']
+  AutomatedDBSnapshotSharing:
+    !Equals [!Ref EnableDatbaseSnapshotSharing, true]
+Mappings:
+  BuilderVaultAMI:
+    us-west-2:
+      AMIId: ami-081afad60c4c199a3
+    us-west-1:
+      AMIId: ami-0c41748f122b0eba6
+    us-east-2:
+      AMIId: ami-0edfee0f691760706
+    us-east-1:
+      AMIId: ami-0ce329f06e9e6d336
+    sa-east-1:
+      AMIId: ami-0b752357169f8300b
+    me-south-1:
+      AMIId: ami-0b71f1f37be47a309
+    eu-west-3:
+      AMIId: ami-0cffddb378e778a0a
+    eu-west-2:
+      AMIId: ami-0949d7ab576f573f4
+    eu-west-1:
+      AMIId: ami-0df003c46c4ec82df
+    eu-south-1:
+      AMIId: ami-0cdda6a4b15f32e03
+    eu-north-1:
+      AMIId: ami-0b9f1196236efe919
+    eu-central-1:
+      AMIId: ami-076e3ec70b4986fa6
+    ca-central-1:
+      AMIId: ami-0b031930f459ef56e
+    ap-southeast-2:
+      AMIId: ami-0fc84c79302ab60ce
+    ap-southeast-1:
+      AMIId: ami-0fa632748114865c4
+    ap-south-1:
+      AMIId: ami-085b0a52ad6a75060
+    ap-northeast-3:
+      AMIId: ami-0fde6bb257b1db221
+    ap-northeast-2:
+      AMIId: ami-0c00a15c30d974c3a
+    ap-northeast-1:
+      AMIId: ami-00e0cfa986c947db3
+  InstanceMappings:
+    c6i.2xlarge:
+      TotalMemory: 16384
+      TotalCpu: 8
+      NitroCPUCount: 6
+      NitroMemory: 12288
+    c6i.xlarge:
+      TotalMemory: 8192
+      TotalCpu: 4
+      NitroCPUCount: 2
+      NitroMemory: 4096
+    m6i.2xlarge:
+      TotalMemory: 32768
+      TotalCpu: 8
+      NitroCPUCount: 6
+      NitroMemory: 28672
+    m6i.xlarge:
+      TotalMemory: 16384
+      TotalCpu: 4
+      NitroCPUCount: 2
+      NitroMemory: 12288
+    r6i.2xlarge:
+      TotalMemory: 65536
+      TotalCpu: 8
+      NitroCPUCount: 6
+      NitroMemory: 61440
+    r6i.xlarge:
+      TotalMemory: 32768
+      TotalCpu: 4
+      NitroCPUCount: 2
+      NitroMemory: 28672
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Required parameters
+        Parameters:
+          - HostedZoneId
+          - HostedZoneName
+          - Namespace
+      - Label:
+          default: Additional Naming configuration (optional)
+        Parameters:
+          - Environ
+      - Label:
+          default: Your KMS stack SSMParameter outputs
+        Parameters:
+          - Node1SSMParameter
+          - Node2SSMParameter
+      - Label:
+          default: Create VPC for me
+        Parameters:
+          - VpcCidr
+          - VpcCidrBlockPublicSubnet1
+          - VpcCidrBlockPublicSubnet2
+          - VpcCidrBlockPrivateSubnet1
+          - VpcCidrBlockPrivateSubnet2
+      - Label:
+          default: Bring your own VPC
+        Parameters:
+          - ExistingVpcId
+          - ExistingPrivateSubnetId1
+          - ExistingPrivateSubnetId2
+          - ExistingPublicSubnetId1
+          - ExistingPublicSubnetId2
+      - Label:
+          default: Security considerations
+        Parameters:
+          - InternetFacing
+          - CidrAllowSdk
+          - CidrAllowP2p
+      - Label:
+          default: Builder Vault general configuration
+        Parameters:
+          - DatabaseInstanceType
+          - DatabaseEngineVersion
+          - BuilderVaultInstanceType
+    ParameterLabels:
+      HostedZoneId:
+        default: AWS Hosted Zone Id (i.e. Z123456789)
+      HostedZoneName:
+        default: AWS Hosted Zone Name (i.e. example.com)
+      Namespace:
+        default: Namespace to give the Builder Vault (i.e. mycompany)
+      Environ:
+        default: Environment Name (i.e. dev|prod) to optionally partition the Builder Vault
+      Node1SSMParameter:
+        default: SSMParameter outputs of your KMS stack for node 1
+      Node2SSMParameter:
+        default: SSMParameter outputs of your KMS stack for node 2
+      VpcCidr:
+        default: VPC CIDR
+      VpcCidrBlockPublicSubnet1:
+        default: Public Subnet 1 CIDR
+      VpcCidrBlockPublicSubnet2:
+        default: Public Subnet 2 CIDR
+      VpcCidrBlockPrivateSubnet1:
+        default: Private Subnet 1 CIDR
+      VpcCidrBlockPrivateSubnet2:
+        default: Private Subnet 2 CIDR
+      ExistingVpcId:
+        default: Existing VPC ID
+      ExistingPrivateSubnetId1:
+        default: Existing Private Subnet 1 ID
+      ExistingPrivateSubnetId2:
+        default: Existing Private Subnet 2 ID
+      ExistingPublicSubnetId1:
+        default: Existing Public Subnet 1 ID
+      ExistingPublicSubnetId2:
+        default: Existing Public Subnet 2 ID
+      InternetFacing:
+        default: Internet Facing
+      CidrAllowSdk:
+        default: Allow CIDR range to access SDK port
+      CidrAllowP2p:
+        default: Allow CIDR range to access P2P port (for embedded node connections)
+      DatabaseInstanceType:
+        default: Database Instance Type
+      DatabaseEngineVersion:
+        default: Database Engine Version
+      BuilderVaultInstanceType:
+        default: Builder Vault TSM Node Instance Type
+Resources:
+  Vpc:
+    Condition: CreateVpc
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc
+  VpcPublicSubnet1:
+    Condition: CreateVpc
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Ref VpcCidrBlockPublicSubnet1
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet1
+      VpcId: !Ref Vpc
+  VpcPublicSubnet1RouteTable:
+    Condition: CreateVpc
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet1
+  VpcPublicSubnet1RouteTableAssociation:
+    Condition: CreateVpc
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VpcPublicSubnet1RouteTable
+      SubnetId: !Ref VpcPublicSubnet1
+  VpcPublicSubnet1DefaultRoute:
+    Condition: CreateVpc
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VpcInternetGateway
+      RouteTableId: !Ref VpcPublicSubnet1RouteTable
+    DependsOn:
+    - VpcInternetGatewayAttachment
+  VpcPublicSubnet1EIP:
+    Condition: CreateVpc
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet1
+  VpcPublicSubnet1NATGateway:
+    Condition: CreateVpc
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt VpcPublicSubnet1EIP.AllocationId
+      SubnetId: !Ref VpcPublicSubnet1
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet1
+    DependsOn:
+    - VpcPublicSubnet1DefaultRoute
+    - VpcPublicSubnet1RouteTableAssociation
+  VpcPublicSubnet2:
+    Condition: CreateVpc
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Ref VpcCidrBlockPublicSubnet2
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet2
+      VpcId: !Ref Vpc
+  VpcPublicSubnet2RouteTable:
+    Condition: CreateVpc
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet2
+  VpcPublicSubnet2RouteTableAssociation:
+    Condition: CreateVpc
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VpcPublicSubnet2RouteTable
+      SubnetId: !Ref VpcPublicSubnet2
+  VpcPublicSubnet2DefaultRoute:
+    Condition: CreateVpc
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VpcInternetGateway
+      RouteTableId: !Ref VpcPublicSubnet2RouteTable
+    DependsOn:
+    - VpcInternetGatewayAttachment
+  VpcPrivateSubnet1:
+    Condition: CreateVpc
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Ref VpcCidrBlockPrivateSubnet1
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PrivateSubnet1
+      VpcId: !Ref Vpc
+  VpcPrivateSubnet1RouteTable:
+    Condition: CreateVpc
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PrivateSubnet1
+  VpcPrivateSubnet1RouteTableAssociation:
+    Condition: CreateVpc
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VpcPrivateSubnet1RouteTable
+      SubnetId: !Ref VpcPrivateSubnet1
+  VpcPrivateSubnet1DefaultRoute:
+    Condition: CreateVpc
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref VpcPublicSubnet1NATGateway
+      RouteTableId: !Ref VpcPrivateSubnet1RouteTable
+  VpcPrivateSubnet2:
+    Condition: CreateVpc
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Ref VpcCidrBlockPrivateSubnet2
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PrivateSubnet2
+      VpcId: !Ref Vpc
+  VpcPrivateSubnet2RouteTable:
+    Condition: CreateVpc
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc/PrivateSubnet2
+  VpcPrivateSubnet2RouteTableAssociation:
+    Condition: CreateVpc
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VpcPrivateSubnet2RouteTable
+      SubnetId: !Ref VpcPrivateSubnet2
+  VpcPrivateSubnet2DefaultRoute:
+    Condition: CreateVpc
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref VpcPublicSubnet1NATGateway
+      RouteTableId: !Ref VpcPrivateSubnet2RouteTable
+  VpcInternetGateway:
+    Condition: CreateVpc
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-vpc
+  VpcInternetGatewayAttachment:
+    Condition: CreateVpc
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref VpcInternetGateway
+      VpcId: !Ref Vpc
+  BVKmsKey:
+    Type: AWS::KMS::Key
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      Description: KMS key for Blockdaemon Builder Vault
+      EnableKeyRotation: true
+      KeyPolicy:
+        Statement:
+        - Action: kms:*
+          Effect: Allow
+          Principal:
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Resource: "*"
+        - Action:
+          - kms:CreateGrant
+          - kms:Decrypt
+          - kms:DescribeKey
+          - kms:Encrypt
+          - kms:GenerateDataKey*
+          - kms:ReEncrypt*
+          Condition:
+            StringEquals:
+              kms:ViaService: !Sub secretsmanager.${AWS::Region}.amazonaws.com
+          Effect: Allow
+          Principal:
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Resource: "*"
+        - Sid: DBSnapshotCopyKmsAccounts
+          Action:
+          - kms:CreateGrant
+          - kms:DescribeKey
+          Effect: Allow
+          Principal:
+            AWS: 
+              - Fn::Sub:
+                - arn:aws:iam::${NodeKmsAccount}:root
+                - NodeKmsAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref Node1SSMParameter]
+              
+              - Fn::Sub:
+                - arn:aws:iam::${NodeKmsAccount}:root
+                - NodeKmsAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref Node2SSMParameter]
+              
+          Resource: "*"
+        Version: '2012-10-17'
+  BVKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/blockdaemon-${Environ}-${Namespace}
+      TargetKeyId: !GetAtt BVKmsKey.Arn
+  DbClusterSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${Environ}-${Namespace}/db-cluster-sg
+      SecurityGroupEgress:
+      - CidrIp: 255.255.255.255/32
+        Description: Disallow all traffic
+        FromPort: 252
+        IpProtocol: icmp
+        ToPort: 86
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: !GetAtt NodeSg.GroupId
+        IpProtocol: tcp
+        FromPort: 5432
+        ToPort: 5432
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  DbClusterIngressSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: allow self connection on 5432
+      FromPort: 5432
+      GroupId: !GetAtt DbClusterSg.GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt DbClusterSg.GroupId
+      ToPort: 5432
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets for builder vault database
+      SubnetIds:
+      - !If [CreateVpc, !Ref VpcPrivateSubnet1, !Ref ExistingPrivateSubnetId1]
+      - !If [CreateVpc, !Ref VpcPrivateSubnet2, !Ref ExistingPrivateSubnetId2]
+  DbSecret:
+    Type: AWS::SecretsManager::Secret
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      Description: !Sub "Database secret for Blockdemon Builder Vault static nodes for ${Namespace}"
+      GenerateSecretString:
+        ExcludeCharacters: '''"\`~!@#$%^&*()_+=[]{}|;:,.<>?/ '
+        GenerateStringKey: password
+        PasswordLength: 30
+        SecretStringTemplate: '{"username":"tsmadmin"}'
+      KmsKeyId: !GetAtt BVKmsKey.Arn
+      Name: !Sub ${Environ}-${Namespace}-db-secret
+  DbCluster:
+    Type: AWS::RDS::DBCluster
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      BackupRetentionPeriod: 30
+      CopyTagsToSnapshot: true
+      DBClusterParameterGroupName: default.aurora-postgresql15
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      DatabaseName:
+        Fn::Join:
+        - ''
+        - - bd
+          - Fn::Join: ['', !Split ['-', !Ref Namespace]]
+      EnableCloudwatchLogsExports:
+      - postgresql
+      Engine: aurora-postgresql
+      EngineVersion: !Ref DatabaseEngineVersion
+      KmsKeyId: !GetAtt BVKmsKey.Arn
+      MasterUserPassword: !Join ['', ["{{resolve:secretsmanager:", !Ref DbSecret, ":SecretString:password::}}"]]
+      MasterUsername: tsmadmin
+      Port: 5432
+      StorageEncrypted: true
+      VpcSecurityGroupIds:
+      - !GetAtt DbClusterSg.GroupId
+  DbWriter:
+    Type: AWS::RDS::DBInstance
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      CACertificateIdentifier: rds-ca-rsa4096-g1
+      DBClusterIdentifier: !Ref DbCluster
+      DBInstanceClass: !Join ['', ['db.', !Ref DatabaseInstanceType]]
+      Engine: aurora-postgresql
+      PromotionTier: 0
+  DbSecretAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref DbSecret
+      TargetId: !Ref DbCluster
+      TargetType: AWS::RDS::DBCluster
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      LoadBalancerAttributes:
+      - Key: deletion_protection.enabled
+        Value: 'false'
+      Scheme:
+        Fn::If:
+        - InternetFacing
+        - internet-facing
+        - internal
+      SecurityGroups:
+      - !GetAtt ALBSg.GroupId
+      Subnets:
+        - Fn::If:
+          - InternetFacing
+          - !If [CreateVpc, !Ref VpcPublicSubnet1, !Ref ExistingPublicSubnetId1]
+          - !If [CreateVpc, !Ref VpcPrivateSubnet1, !Ref ExistingPrivateSubnetId1]
+        - Fn::If:
+          - InternetFacing
+          - !If [CreateVpc, !Ref VpcPublicSubnet2, !Ref ExistingPublicSubnetId2]
+          - !If [CreateVpc, !Ref VpcPrivateSubnet2, !Ref ExistingPrivateSubnetId2]
+      Type: application
+      Tags:
+        - Fn::If:
+          - CreateVpc
+          -
+            Key: InternetGatewayAttachment
+            Value:
+              Fn::Join:
+                - ""
+                - Fn::Split:
+                  - "|"
+                  - !Ref VpcInternetGatewayAttachment
+          - !Ref AWS::NoValue
+  ALBSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${Environ}-${Namespace}/alb-sg
+      SecurityGroupIngress:
+      - CidrIp: !Ref CidrAllowSdk
+        FromPort: 443
+        IpProtocol: tcp
+        ToPort: 443
+      SecurityGroupEgress:
+      - DestinationSecurityGroupId: !GetAtt NodeSg.GroupId
+        IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  NodeSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for builder vault node 0
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        Description: Allow all outbound traffic by default
+        IpProtocol: "-1"
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  NodeSgFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow traffic from load balancer
+      FromPort: 8080
+      GroupId: !GetAtt NodeSg.GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt ALBSg.GroupId
+      ToPort: 8080
+  NodeSgFromNlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow traffic from load balancer
+      FromPort: 9000
+      GroupId: !GetAtt NodeSg.GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt NLBSg.GroupId
+      ToPort: 9000
+  NodeToNode:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow direct traffic from nodes to communicate mpc
+      FromPort: 9000
+      GroupId: !GetAtt NodeSg.GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt NodeSg.GroupId
+      ToPort: 9000
+  ALB443CertNode1:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub node-1-${Namespace}.${HostedZoneName}
+      DomainValidationOptions:
+      - DomainName: !Sub node-1-${Namespace}.${HostedZoneName}
+        HostedZoneId: !Ref HostedZoneId
+      ValidationMethod: DNS
+  ALB443CertNode2:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub node-2-${Namespace}.${HostedZoneName}
+      DomainValidationOptions:
+      - DomainName: !Sub node-2-${Namespace}.${HostedZoneName}
+        HostedZoneId: !Ref HostedZoneId
+      ValidationMethod: DNS
+  ALBListener443:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+      - CertificateArn: !Ref ALB443CertNode1
+      DefaultActions:
+      - FixedResponseConfig:
+          MessageBody: No content
+          StatusCode: '200'
+        Type: fixed-response
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+  ALBListener443DefaultCertNodes:
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Properties:
+      Certificates:
+      - CertificateArn: !Ref ALB443CertNode1
+      - CertificateArn: !Ref ALB443CertNode2
+      ListenerArn: !Ref ALBListener443
+  RecordSetNode1:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt ApplicationLoadBalancer.DNSName
+        HostedZoneId: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub node-1-${Namespace}.${HostedZoneName}
+      SetIdentifier: !Sub node-1-${ApplicationLoadBalancer.LoadBalancerName}
+      Type: A
+      Weight: 100
+  RecordSetNode2:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt ApplicationLoadBalancer.DNSName
+        HostedZoneId: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub node-2-${Namespace}.${HostedZoneName}
+      SetIdentifier: !Sub node-2-${ApplicationLoadBalancer.LoadBalancerName}
+      Type: A
+      Weight: 100
+  CloudMapNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Description: !Sub ${Environ}-${Namespace} namespace for Builder Vault
+      Name: !Sub ${Environ}-${Namespace}
+      Vpc: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  InstanceLogGroup:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      LogGroupName: !Sub /${Environ}/${Namespace}/nitro-enclave/ec2
+      RetentionInDays: 365
+  CloudwatchConfigParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${Environ}/${Namespace}/nitro-enclave/cloudwatch-config
+      Type: String
+      Value: !Sub
+        - |
+          {
+            "agent": {
+              "metrics_collection_interval": 60,
+              "run_as_user": "root"
+            },
+            "logs": {
+              "logs_collected": {
+                "files": {
+                  "collect_list": [
+                    {
+                      "file_path": "/var/log/cfn-hup.log",
+                      "log_group_name": "${InstanceLogGroup}",
+                      "log_stream_name": "{instance_id}/cfn-hup.log",
+                      "retention_in_days": 30
+                    },
+                    {
+                      "file_path": "/var/log/cfn-init-cmd.log",
+                      "log_group_name": "${InstanceLogGroup}",
+                      "log_stream_name": "{instance_id}/cfn-init-cmd.log",
+                      "retention_in_days": 30
+                    },
+                    {
+                      "file_path": "/var/log/cfn-init.log",
+                      "log_group_name": "${InstanceLogGroup}",
+                      "log_stream_name": "{instance_id}/cfn-init.log",
+                      "retention_in_days": 30
+                    },
+                    {
+                      "file_path": "/var/log/cloud-init-output.log",
+                      "log_group_name": "${InstanceLogGroup}",
+                      "log_stream_name": "{instance_id}/cloud-init-output.log",
+                      "retention_in_days": 30
+                    }
+                  ]
+                }
+              }
+            },
+            "metrics": {
+              "aggregation_dimensions": [
+                ["InstanceId"]
+              ],
+              "append_dimensions": {
+                "ImageId": "${!aws:ImageId}",
+                "InstanceId": "${!aws:InstanceId}",
+                "InstanceType": "${!aws:InstanceType}"
+              },
+              "metrics_collected": {
+                "cpu": {
+                  "measurement": [
+                    "cpu_usage_idle",
+                    "cpu_usage_iowait",
+                    "cpu_usage_user",
+                    "cpu_usage_system"
+                  ],
+                  "metrics_collection_interval": 60,
+                  "resources": ["*"],
+                  "totalcpu": false
+                },
+                "disk": {
+                  "measurement": [
+                    "used_percent",
+                    "inodes_free"
+                  ],
+                  "metrics_collection_interval": 60,
+                  "resources": ["*"]
+                },
+                "diskio": {
+                  "measurement": [
+                    "io_time",
+                    "write_bytes",
+                    "read_bytes",
+                    "writes",
+                    "reads"
+                  ],
+                  "metrics_collection_interval": 60,
+                  "resources": [
+                      "*"
+                  ]
+                },
+                "mem": {
+                  "measurement": [
+                    "mem_used_percent"
+                  ],
+                  "metrics_collection_interval": 60
+                },
+                "netstat": {
+                  "measurement": [
+                    "tcp_established",
+                    "tcp_time_wait"
+                  ],
+                  "metrics_collection_interval": 60
+                },
+                "swap": {
+                  "measurement": [
+                    "swap_used_percent"
+                  ],
+                  "metrics_collection_interval": 60
+                }
+              }
+            }
+          }
+        - InstanceLogGroup: !Ref InstanceLogGroup
+  NLBSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${Environ}-${Namespace}/nlb-sg
+      SecurityGroupIngress:
+      - CidrIp:  !Ref CidrAllowP2p
+        FromPort: 9000
+        IpProtocol: tcp
+        ToPort: 9000
+      SecurityGroupEgress:
+      - DestinationSecurityGroupId: !GetAtt NodeSg.GroupId
+        IpProtocol: tcp
+        FromPort: 9000
+        ToPort: 9000
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  Node1NLBRecordset:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !Sub dualstack.${Node1NLB.DNSName}
+        HostedZoneId: !GetAtt Node1NLB.CanonicalHostedZoneID
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub node-1-p2p-${Namespace}.${HostedZoneName}
+      SetIdentifier: !Sub node-1-${Node1NLB.LoadBalancerName}
+      Type: A
+      Weight: 100
+  Node1NLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      LoadBalancerAttributes:
+      - Key: deletion_protection.enabled
+        Value: 'false'
+      - Key: load_balancing.cross_zone.enabled
+        Value: 'true'
+      Scheme:
+        Fn::If:
+        - InternetFacing
+        - internet-facing
+        - internal
+      SecurityGroups:
+      - !GetAtt NLBSg.GroupId
+      Subnets:
+        - Fn::If:
+          - InternetFacing
+          - !If [CreateVpc, !Ref VpcPublicSubnet1, !Ref ExistingPublicSubnetId1]
+          - !If [CreateVpc, !Ref VpcPrivateSubnet1, !Ref ExistingPrivateSubnetId1]
+        - Fn::If:
+          - InternetFacing
+          - !If [CreateVpc, !Ref VpcPublicSubnet2, !Ref ExistingPublicSubnetId2]
+          - !If [CreateVpc, !Ref VpcPrivateSubnet2, !Ref ExistingPrivateSubnetId2]
+  Node1NLBTarget:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPort: '9000'
+      HealthCheckProtocol: TCP
+      Name: !Sub TG1-${Node1NLB.LoadBalancerName}
+      Port: 9000
+      Protocol: TCP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '30'
+      - Key: proxy_protocol_v2.enabled
+        Value: 'false'
+      TargetType: instance
+      Targets:
+      - Id: !Ref Node1
+        Port: 9000
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  Node1NLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref Node1NLBTarget
+        Type: forward
+      LoadBalancerArn: !Ref Node1NLB
+      Port: 9000
+      Protocol: TCP
+  Node1InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: |
+        The IAM role for Builder Vault node 1 instance profile. The nodes will have a default policy that will include the permissions for SSM parameters on bootstrapping configuration,
+        as well as cloudformation signals. Additionally, SSM Managed Instance Core and CloudWatchAgentServerPolicy are attached to the role for metrics and connecting to the Nodes via SSM.
+        There will be an additional policy attached per node that will allow the Builder Vault node to access logs, secrets for its resources, and the KMS key for the Nitro Enclave.
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+      - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      - !Sub arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy
+      Tags:
+      - Key: EnclaveName
+        Value: node-1
+  Node2NLBRecordset:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !Sub dualstack.${Node2NLB.DNSName}
+        HostedZoneId: !GetAtt Node2NLB.CanonicalHostedZoneID
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub node-2-p2p-${Namespace}.${HostedZoneName}
+      SetIdentifier: !Sub node-2-${Node2NLB.LoadBalancerName}
+      Type: A
+      Weight: 100
+  Node2NLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: network
+      LoadBalancerAttributes:
+      - Key: deletion_protection.enabled
+        Value: 'false'
+      - Key: load_balancing.cross_zone.enabled
+        Value: 'true'
+      Scheme:
+        Fn::If:
+        - InternetFacing
+        - internet-facing
+        - internal
+      SecurityGroups:
+      - !GetAtt NLBSg.GroupId
+      Subnets:
+        - Fn::If:
+          - InternetFacing
+          - !If [CreateVpc, !Ref VpcPublicSubnet1, !Ref ExistingPublicSubnetId1]
+          - !If [CreateVpc, !Ref VpcPrivateSubnet1, !Ref ExistingPrivateSubnetId1]
+        - Fn::If:
+          - InternetFacing
+          - !If [CreateVpc, !Ref VpcPublicSubnet2, !Ref ExistingPublicSubnetId2]
+          - !If [CreateVpc, !Ref VpcPrivateSubnet2, !Ref ExistingPrivateSubnetId2]
+  Node2NLBTarget:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPort: '9000'
+      HealthCheckProtocol: TCP
+      Name: !Sub TG2-${Node2NLB.LoadBalancerName}
+      Port: 9000
+      Protocol: TCP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '30'
+      - Key: proxy_protocol_v2.enabled
+        Value: 'false'
+      TargetType: instance
+      Targets:
+      - Id: !Ref Node2
+        Port: 9000
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  Node2NLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref Node2NLBTarget
+        Type: forward
+      LoadBalancerArn: !Ref Node2NLB
+      Port: 9000
+      Protocol: TCP
+  Node2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: |
+        The IAM role for Builder Vault node 2 instance profile. The nodes will have a default policy that will include the permissions for SSM parameters on bootstrapping configuration,
+        as well as cloudformation signals. Additionally, SSM Managed Instance Core and CloudWatchAgentServerPolicy are attached to the role for metrics and connecting to the Nodes via SSM.
+        There will be an additional policy attached per node that will allow the Builder Vault node to access logs, secrets for its resources, and the KMS key for the Nitro Enclave.
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+      - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      - !Sub arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy
+      Tags:
+      - Key: EnclaveName
+        Value: node-2
+  DBSnapshotStateMachineExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: StateMachineExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !GetAtt DBSnapshotStateMachine.Arn
+  DBSnapshotStateMachineRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - !Sub states.${AWS::Region}.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt CreateDBSnapshotLambda.Arn
+                  - !GetAtt ShareDBSnapshotLambda.Arn
+  DBSnapshotStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      DefinitionString: !Sub
+        |-
+          {
+            "StartAt": "CreateSnapshot",
+            "States": {
+              "CreateSnapshot": {
+                "Type": "Task",
+                "Resource": "${CreateDBSnapshotLambda.Arn}",
+                "OutputPath": "$",
+                "InputPath": "$",
+                "ResultPath": "$.snapshotInfo",
+                "TimeoutSeconds": 120,
+                "Next": "ShareSnapshot"
+              },
+              "ShareSnapshot": {
+                "Type": "Task",
+                "Resource": "${ShareDBSnapshotLambda.Arn}",
+                "OutputPath": "$",
+                "InputPath": "$.snapshotInfo",
+                "TimeoutSeconds": 60,
+                "Next": "SuccessState",
+                "Retry": [ {
+                  "ErrorEquals": [ "SnapshotNotAvailableException" ],
+                  "IntervalSeconds": 60,
+                  "MaxAttempts": 15,
+                  "BackoffRate": 2
+                } ]
+              },
+              "SuccessState": {
+                "Type": "Succeed"
+              }
+            }
+          }
+      RoleArn: !GetAtt DBSnapshotStateMachineRole.Arn
+  CreateDBSnapshotLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+      - PolicyName: CreateDBSnapshotLambdaPolicy
+        PolicyDocument:
+          Statement:
+          - Sid: DBExport
+            Action:
+              - rds:CreateDBClusterSnapshot
+              - rds:AddTagsToResource
+            Effect: Allow
+            Resource: 
+              - !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster-snapshot:*
+              - !GetAtt DbCluster.DBClusterArn
+          - Sid: CfnAccess
+            Action:
+              - cloudformation:ListStacks
+              - cloudformation:DescribeStacks
+            Effect: Allow
+            Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*
+          - Sid: KmsAccess
+            Action:
+              - kms:Decrypt
+            Effect: Allow
+            Resource: !GetAtt BVKmsKey.Arn
+          - Sid: LambdaLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+  CreateDBSnapshotLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Lambda function to backup the TSM databases 
+      Handler: index.lambda_handler
+      Role: !GetAtt CreateDBSnapshotLambdaRole.Arn
+      Runtime: python3.11
+      Timeout: 60
+      Environment:
+        Variables:
+          NAMESPACE: !Ref Namespace
+          ENVIRON: !Ref Environ
+          CORE_STACK_NAME: !Ref AWS::StackName
+          DB_CLUSTER: !Ref DbCluster
+      Code:
+        ZipFile: |
+          import os
+          import datetime
+          import logging
+          import boto3
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+
+          rds_client = boto3.client("rds")
+          cfn_client = boto3.client("cloudformation")
+
+          NAMESPACE = os.environ["NAMESPACE"]
+          ENVIRON = os.environ["ENVIRON"]
+          DB_CLUSTER = os.environ["DB_CLUSTER"]
+          CORE_STACK_NAME = os.environ["CORE_STACK_NAME"]
+
+
+          def lambda_handler(event, _):
+              LOGGER.info(f"Received db snapshot event: {event}")
+              snapshot_response = start_snapshot()
+              LOGGER.info(f"Snapshot started: {snapshot_response}")
+              snapshot_id = snapshot_response["DBClusterSnapshot"]["DBClusterSnapshotIdentifier"]
+              node_stack_accounts = find_node_accounts_for_share()
+              return {
+                  "DBClusterSnapshotIdentifier": snapshot_id,
+                  "NodeStackAccounts": node_stack_accounts,
+              }
+
+
+          def start_snapshot():
+              """
+              Starts a new snapshot task for the nodes database.
+              """
+              return rds_client.create_db_cluster_snapshot(
+                  DBClusterSnapshotIdentifier=f"{NAMESPACE}-{ENVIRON}-db-snapshot-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}",
+                  DBClusterIdentifier=DB_CLUSTER,
+              )
+
+
+          def find_node_accounts_for_share():
+              node_accounts = set()
+              paginator = cfn_client.get_paginator("list_stacks")
+              response_iterator = paginator.paginate(
+                  StackStatusFilter=[
+                      "CREATE_COMPLETE",
+                      "UPDATE_COMPLETE",
+                      "IMPORT_COMPLETE",
+                      "UPDATE_ROLLBACK_COMPLETE",
+                      "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+                  ],
+              )
+              for response in response_iterator:
+                  for summary in response["StackSummaries"]:
+                      stack_response = cfn_client.describe_stacks(StackName=summary["StackId"])
+                      for stack in stack_response["Stacks"]:
+                          parameter_map = {
+                              parameter["ParameterKey"]: parameter["ParameterValue"]
+                              for parameter in stack.get("Parameters", [])
+                          }
+                          if (
+                              "BuilderVaultInstanceType" in parameter_map
+                              and parameter_map.get("CoreNodesStackName", None) == CORE_STACK_NAME
+                          ):
+                              node_accounts.add(parameter_map["NodeSSMParameter"].split(":")[4])
+              return list(node_accounts)
+
+  ShareDBSnapshotLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+      - PolicyName: NodeDBBackupLambdaPolicy
+        PolicyDocument:
+          Statement:
+          - Sid: DBExport
+            Action:
+              - rds:ModifyDBClusterSnapshotAttribute
+              - rds:DescribeDBClusterSnapshots
+            Effect: Allow
+            Resource: 
+              - !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster-snapshot:*
+          - Sid: LambdaLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+  ShareDBSnapshotLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Lambda function to share the TSM database snapshots with KMS stack accounts
+      Handler: index.lambda_handler
+      Role: !GetAtt ShareDBSnapshotLambdaRole.Arn
+      Runtime: python3.11
+      Timeout: 60
+      Environment:
+        Variables:
+          SSM_PARAMETERS: !Sub "${Node1SSMParameter},${Node2SSMParameter}"
+      Code:
+        ZipFile: |
+          import os
+          import logging
+          import boto3
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+
+          rds_client = boto3.client("rds")
+
+          SSM_PARAMETERS = os.environ["SSM_PARAMETERS"].split(",")
+
+
+          class SnapshotNotAvailableException(Exception):
+              pass
+
+
+          def lambda_handler(event, _):
+              LOGGER.info(f"Received db snapshot share event: {event}")
+              db_snapshot_id = event["DBClusterSnapshotIdentifier"]
+              node_stack_accounts = event["NodeStackAccounts"]
+              snapshot_status = check_snapshot_status(db_snapshot_id)
+              if snapshot_status != "available":
+                  raise SnapshotNotAvailableException(
+                      f"Snapshot {db_snapshot_id} is not available yet"
+                  )
+              else:
+                  LOGGER.info(f"Snapshot {db_snapshot_id} is available, sharing...")
+                  share_snapshot(node_stack_accounts, db_snapshot_id)
+
+
+          def check_snapshot_status(db_snapshot_id: str):
+              """
+              Checks the status of the snapshot.
+              """
+              snapshot_status = rds_client.describe_db_cluster_snapshots(
+                  DBClusterSnapshotIdentifier=db_snapshot_id
+              )["DBClusterSnapshots"][0]["Status"]
+              return snapshot_status
+
+
+          def share_snapshot(node_stack_accounts: dict, db_snapshot_id: str):
+              """
+              Shares the snapshot with the other accounts.
+              """
+              account_ids = set(node_stack_accounts)
+              account_ids.update([ssm_param.split(":")[4] for ssm_param in SSM_PARAMETERS])
+              rds_client.modify_db_cluster_snapshot_attribute(
+                  DBClusterSnapshotIdentifier=db_snapshot_id,
+                  AttributeName="restore",
+                  ValuesToAdd=list(account_ids),
+              )
+              LOGGER.info(f"Snapshot {db_snapshot_id} shared with accounts: {account_ids}")
+
+  DBSnapshotRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Rule to schedule the database snapshot sharing with KMS stack accounts
+      State: !If [AutomatedDBSnapshotSharing, ENABLED, DISABLED]
+      ScheduleExpression: !Sub 
+        - "rate(${DatabaseSnapshotFrequencyDays} ${Unit})"
+        - Unit:
+            Fn::If:
+              - BackupsEveryDay
+              - day
+              - days
+      Targets:
+      - Id: DBBackupScheduler
+        Arn: !Ref DBSnapshotStateMachine
+        RoleArn: !GetAtt DBSnapshotStateMachineExecutionRole.Arn
+  NodeDefaultPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: NodeDefaultPolicy
+      Roles:
+      - Ref: Node1InstanceRole
+      - Ref: Node2InstanceRole
+      PolicyDocument:
+        Statement:
+        - Action:
+          - cloudformation:DescribeStackResource
+          - cloudformation:SignalResource
+          Effect: Allow
+          Resource: !Ref AWS::StackId
+        - Action:
+          - ssm:GetParameter
+          Effect: Allow
+          Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+          Condition:
+            StringEquals:
+              ssm:resourceTag/aws:cloudformation:stack-name: !Sub ${AWS::StackName}
+        Version: '2012-10-17'
+  NodeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpTokens: required
+          HttpPutResponseHopLimit: 2
+          InstanceMetadataTags: enabled
+    DependsOn:
+    - DbCluster
+    - DbSecretAttachment
+    - DbSecret
+    - DbSubnetGroup
+    - DbWriter
+  Node1SecretPrivateKey:
+    Type: AWS::SecretsManager::Secret
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      KmsKeyId: !GetAtt BVKmsKey.Arn
+      Name: !Sub ${Environ}-${Namespace}-private-key-1
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+      - Key: node-index
+        Value: '1'
+      - Key: tsm-type
+        Value: static
+  Node1SecretPublicKey:
+    Type: AWS::SecretsManager::Secret
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      KmsKeyId: !GetAtt BVKmsKey.Arn
+      Name: !Sub ${Environ}-${Namespace}-public-key-1
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+      - Key: node-index
+        Value: '1'
+      - Key: tsm-type
+        Value: static
+  Node1InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - !Ref Node1InstanceRole
+    DependsOn:
+    - DbCluster
+    - DbSecretAttachment
+    - DbSecret
+    - DbSubnetGroup
+    - DbWriter
+  Node1ConfigSSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${Environ}/${Namespace}/node-1/default-tsm-config
+      Type: String
+      Value:
+        Fn::Sub: |
+          {
+            "NAMESPACE": "${Namespace}",
+            "NODE_NAME": "node-1",
+            "NODE_INDEX": "1",
+            "ENVIRON": "${Environ}",
+            "DB_DRIVER": "postgres",
+            "PRIVATE_KEY_SECRET_ARN": "${Node1SecretPrivateKey}",
+            "PUBLIC_KEY_SECRET_ARN": "${Node1SecretPublicKey}",
+            "TSM_TYPE": "static",
+            "DB_SECRET_ARN": "${DbSecretAttachment}",
+            "NODE_SSM_PARAM_ARN": "${Node1SSMParameter}"
+          }
+  CloudMapServiceNode1:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: !Sub ${Environ}-${Namespace}-node-1 service for Builder Vault
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      Name: node-1
+      NamespaceId: !Ref CloudMapNamespace
+      Tags:
+        - Key: tsm-type
+          Value: static
+        - Key: node-index
+          Value: '1'
+  CloudMapServiceInstanceNode1:
+    Type: AWS::ServiceDiscovery::Instance
+    Properties:
+      InstanceAttributes:
+        TSM_TYPE: "static"
+        NODE_INDEX: "1"
+        AWS_INSTANCE_IPV4: !Sub "${Node1.PrivateIp}"
+      InstanceId: !Ref Node1
+      ServiceId: !Ref CloudMapServiceNode1
+  Node1:
+    Type: AWS::EC2::Instance
+    Properties:
+      EnclaveOptions:
+        Enabled: true
+      IamInstanceProfile: !Ref Node1InstanceProfile
+      ImageId: !FindInMap [BuilderVaultAMI, !Ref 'AWS::Region', AMIId]
+      InstanceType: !Ref BuilderVaultInstanceType
+      LaunchTemplate:
+        LaunchTemplateId: !GetAtt NodeLaunchTemplate.LaunchTemplateId
+        Version: !Sub ${NodeLaunchTemplate.LatestVersionNumber}
+      PropagateTagsToVolumeOnCreation: true
+      SecurityGroupIds:
+        - !Sub ${NodeSg.GroupId}
+      SubnetId: !If [CreateVpc, !Ref VpcPrivateSubnet1, !Ref ExistingPrivateSubnetId1]
+      Tags:
+      - Key: CONFIG_SSM_PARAM
+        Value: !Ref Node1ConfigSSMParameter
+      - Key: EnclaveName
+        Value: node-1
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-node-1
+      UserData:
+        Fn::Base64: !Sub
+          |
+          #!/bin/bash
+          echo "Starting Builder Vault Node 1"
+          /opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource Node1 -c default
+          /opt/aws/bin/cfn-signal -e $? --region ${AWS::Region} --stack ${AWS::StackName} --resource Node1
+          cat /var/log/cfn-init.log >&2
+    DependsOn:
+    - DbCluster
+    - DbSecretAttachment
+    - DbSecret
+    - DbSubnetGroup
+    - DbWriter
+    - NodeDefaultPolicy
+    - Node1PolicySpecific
+    - Node1InstanceRole
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default:
+          - SetupCfnHup
+          - Nitro
+          update:
+          - SetupCfnHup
+          - Nitro
+        Nitro:
+          files:
+            "/params.sh":
+              content:
+                Fn::Sub:
+                - |
+                  #!/bin/bash
+                  export BASE_PATH=/app
+                  export NAME=${Name}
+                  export NAMESPACE=${Namespace}
+                  export DIMENSIONS="--dimensions Environment=${Environ},Index=${Name},Namespace=${Namespace}"
+                  export NITRO_CPU_COUNT=${NitroCPUCount}
+                  export NITRO_MEMORY=${NitroMemory}
+                  export NITRO_ALLOCATED_MEMORY=${NitroMemory}
+                  export NITRO_ALLOCATED_CPU=${NitroCPUCount}
+                  export CLOUDWATCH_PARAM_NAME=${CloudwatchConfigParameter}
+                  export HEALTH_CHECK_PATH=/ping
+                  export HEALTH_CHECK_PORT=8080
+                  export APPLICATION_PORT=8080
+                - NitroCPUCount: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroCPUCount]
+                  NitroMemory: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroMemory]
+                  Name: node-1
+              encoding: plain
+              mode: '000744'
+              owner: root
+              group: root
+            "/etc/nitro_enclaves/allocator.yaml":
+              content:
+                Fn::Sub:
+                - |2
+
+                  ---
+                  memory_mib: ${NitroMemory}
+                  cpu_count: ${NitroCPUCount}
+                - NitroMemory: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroMemory]
+                  NitroCPUCount: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroCPUCount]
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+          commands:
+            '000':
+              command: "/app/setup-cloudwatch.sh"
+            '001':
+              command: systemctl stop enclave.service
+            '002':
+              command: nitro-cli terminate-enclave --all
+            '003':
+              command: systemctl stop nitro-enclaves-allocator.service
+            '004':
+              command: systemctl start nitro-enclaves-allocator.service
+            '005':
+              command: systemctl start enclave.service
+        SetupCfnHup:
+          files:
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content:
+                Fn::Sub:
+                - |
+                  [cfn-auto-reloader-hook]
+                  triggers=post.update
+                  path=Resources.${LogicalId}.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ${LogicalId} --configsets update --region ${AWS::Region}
+                  runas=root
+                - LogicalId: Node1
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+            "/etc/cfn/cfn-hup.conf":
+              content:
+                Fn::Sub: |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+                  interval=1
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                - "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                - "/etc/cfn/cfn-hup.conf"
+        Signal:
+          commands:
+            '000':
+              command:
+                Fn::Sub:
+                - "/opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource
+                  ${LogicalId} --region {AWS::Region}"
+                - LogicalId: Node1
+  Node1PolicySpecific:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Sid: AllowSecretUpdatesThisAccount
+          Action:
+          - secretsmanager:GetSecretValue
+          - secretsmanager:UpdateSecret
+          Condition:
+            StringEquals:
+              secretsmanager:ResourceTag/aws:cloudformation:stack-id: !Sub "${AWS::StackId}"
+          Effect: Allow
+          Resource: "*"
+        - Sid: AllowGetSecretsKMSAccount
+          Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+          Resource:
+            - Fn::Sub:
+                - arn:aws:secretsmanager:*:${NodeKmsAccount}:secret:*
+                - NodeKmsAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref Node1SSMParameter]
+        - Sid: AllowSecretUpdatesKMSAccount
+          Effect: Allow
+          Action:
+            - secretsmanager:UpdateSecret
+          Condition:
+            ForAllValues:StringEquals:
+              secretsmanager:ResourceTag/Namespace: !Sub ${Namespace}
+              secretsmanager:ResourceTag/NodeIndex: 1
+          Resource:
+            - Fn::Sub:
+                - arn:aws:secretsmanager:*:${NodeKmsAccount}:secret:*
+                - NodeKmsAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref Node1SSMParameter]
+        - Sid: KeyAccessForKMSAccount
+          Action:
+          - kms:Decrypt
+          - kms:Encrypt
+          - kms:GenerateDataKey*
+          - kms:ReEncrypt*
+          Effect: Allow
+          Resource:
+            Fn::Sub:
+              - arn:aws:kms:*:${NodeKmsAccount}:key/*
+              - NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref Node1SSMParameter]
+        - Sid: KMSForThisAccount
+          Action:
+          - kms:Decrypt
+          - kms:Encrypt
+          - kms:GenerateDataKey*
+          - kms:ReEncrypt*
+          Condition:
+            ForAnyValue:StringLike:
+              kms:ResourceAliases:
+              - !Sub alias/blockdaemon-${Environ}-${Namespace}
+          Effect: Allow
+          Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
+        - Sid: SSMAccessKMSAccount
+          Action:
+            - ssm:GetParameter
+          Effect: Allow
+          Resource: !Sub "${Node1SSMParameter}"
+        - Action: secretsmanager:GetSecretValue
+          Effect: Allow
+          Resource:
+          - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environ}-${Namespace}-public-key-*
+        - Action:
+          - cloudformation:Describe*
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:DescribeLogStreams
+          - logs:PutLogEvents
+          - s3:ListBucket*
+          - secretsmanager:ListSecrets
+          Effect: Allow
+          Resource: "*"
+        - Action:
+          - s3:GetObject*
+          Effect: Allow
+          Resource:
+            - Fn::Sub:
+              - arn:aws:s3:::${Namespace}-${NodeKmsAccount}-${NodeKmsRegion}-node-1-bucket/node-1/config.toml
+              - NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref Node1SSMParameter]
+                NodeKmsRegion:
+                  Fn::Select:
+                    - 3
+                    - Fn::Split: [":", !Ref Node1SSMParameter]
+          Condition:
+            StringEquals:
+              s3:ResourceAccount:
+                Fn::Sub:
+                  - "${NodeKmsAccount}"
+                  - NodeKmsAccount:
+                      Fn::Select:
+                        - 4
+                        - Fn::Split: [":", !Ref Node1SSMParameter]
+        - Action:
+          - s3:PutObject*
+          Effect: Allow
+          Resource:
+            - Fn::Sub:
+              - arn:aws:s3:::${Namespace}-${NodeKmsAccount}-${NodeKmsRegion}-node-1-bucket/node-1/*
+              - NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref Node1SSMParameter]
+                NodeKmsRegion:
+                  Fn::Select:
+                    - 3
+                    - Fn::Split: [":", !Ref Node1SSMParameter]
+          Condition:
+            StringEquals:
+              s3:ResourceAccount:
+                Fn::Sub:
+                  - "${NodeKmsAccount}"
+                  - NodeKmsAccount:
+                      Fn::Select:
+                        - 4
+                        - Fn::Split: [":", !Ref Node1SSMParameter]
+        Version: '2012-10-17'
+      PolicyName: Node1PolicySpecific
+      Roles:
+      - !Ref Node1InstanceRole
+  Node1ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - 'TG1'
+          - !GetAtt ApplicationLoadBalancer.LoadBalancerName
+      HealthCheckPath: "/ping"
+      HealthCheckPort: '8080'
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
+      Port: 8080
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '30'
+      - Key: stickiness.enabled
+        Value: 'false'
+      TargetType: instance
+      Targets:
+      - Id: !Ref Node1
+        Port: 8080
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  Node1ALBListenerTargetGroupRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - TargetGroupArn: !Ref Node1ALBTargetGroup
+        Type: forward
+      Conditions:
+      - Field: host-header
+        HostHeaderConfig:
+          Values:
+          - Fn::Sub: node-1-${Namespace}.${HostedZoneName}
+      ListenerArn: !Ref ALBListener443
+      Priority: !If [InternetFacing, 2, 5]
+  Node2SecretPrivateKey:
+    Type: AWS::SecretsManager::Secret
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      KmsKeyId: !GetAtt BVKmsKey.Arn
+      Name: !Sub ${Environ}-${Namespace}-private-key-2
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+      - Key: node-index
+        Value: '2'
+      - Key: tsm-type
+        Value: static
+  Node2SecretPublicKey:
+    Type: AWS::SecretsManager::Secret
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      KmsKeyId: !GetAtt BVKmsKey.Arn
+      Name: !Sub ${Environ}-${Namespace}-public-key-2
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+      - Key: node-index
+        Value: '2'
+      - Key: tsm-type
+        Value: static
+  Node2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - !Ref Node2InstanceRole
+    DependsOn:
+    - DbCluster
+    - DbSecretAttachment
+    - DbSecret
+    - DbSubnetGroup
+    - DbWriter
+  Node2ConfigSSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${Environ}/${Namespace}/node-2/default-tsm-config
+      Type: String
+      Value:
+        Fn::Sub: |
+          {
+            "NAMESPACE": "${Namespace}",
+            "NODE_NAME": "node-2",
+            "NODE_INDEX": "2",
+            "ENVIRON": "${Environ}",
+            "DB_DRIVER": "postgres",
+            "PRIVATE_KEY_SECRET_ARN": "${Node2SecretPrivateKey}",
+            "PUBLIC_KEY_SECRET_ARN": "${Node2SecretPublicKey}",
+            "TSM_TYPE": "static",
+            "DB_SECRET_ARN": "${DbSecretAttachment}",
+            "NODE_SSM_PARAM_ARN": "${Node2SSMParameter}"
+          }
+  CloudMapServiceNode2:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: !Sub ${Environ}-${Namespace}-node-2 service for Builder Vault
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      Name: node-2
+      NamespaceId: !Ref CloudMapNamespace
+      Tags:
+        - Key: tsm-type
+          Value: static
+        - Key: node-index
+          Value: '2'
+  CloudMapServiceInstanceNode2:
+    Type: AWS::ServiceDiscovery::Instance
+    Properties:
+      InstanceAttributes:
+        TSM_TYPE: "static"
+        NODE_INDEX: "2"
+        AWS_INSTANCE_IPV4: !Sub "${Node2.PrivateIp}"
+      InstanceId: !Ref Node2
+      ServiceId: !Ref CloudMapServiceNode2
+  Node2:
+    Type: AWS::EC2::Instance
+    Properties:
+      EnclaveOptions:
+        Enabled: true
+      IamInstanceProfile: !Ref Node2InstanceProfile
+      ImageId: !FindInMap [BuilderVaultAMI, !Ref 'AWS::Region', AMIId]
+      InstanceType: !Ref BuilderVaultInstanceType
+      LaunchTemplate:
+        LaunchTemplateId: !GetAtt NodeLaunchTemplate.LaunchTemplateId
+        Version: !Sub ${NodeLaunchTemplate.LatestVersionNumber}
+      PropagateTagsToVolumeOnCreation: true
+      SecurityGroupIds:
+        - !Sub ${NodeSg.GroupId}
+      SubnetId: !If [CreateVpc, !Ref VpcPrivateSubnet1, !Ref ExistingPrivateSubnetId1]
+      Tags:
+      - Key: CONFIG_SSM_PARAM
+        Value: !Ref Node2ConfigSSMParameter
+      - Key: EnclaveName
+        Value: node-2
+      - Key: Name
+        Value: !Sub ${Environ}-${Namespace}-node-2
+      UserData:
+        Fn::Base64: !Sub
+          |
+          #!/bin/bash
+          echo "Starting Builder Vault Node 2"
+          /opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource Node2 -c default
+          /opt/aws/bin/cfn-signal -e $? --region ${AWS::Region} --stack ${AWS::StackName} --resource Node2
+          cat /var/log/cfn-init.log >&2
+    DependsOn:
+    - DbCluster
+    - DbSecretAttachment
+    - DbSecret
+    - DbSubnetGroup
+    - DbWriter
+    - NodeDefaultPolicy
+    - Node2PolicySpecific
+    - Node2InstanceRole
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default:
+          - SetupCfnHup
+          - Nitro
+          update:
+          - SetupCfnHup
+          - Nitro
+        Nitro:
+          files:
+            "/params.sh":
+              content:
+                Fn::Sub:
+                - |
+                  #!/bin/bash
+                  export BASE_PATH=/app
+                  export NAME=${Name}
+                  export NAMESPACE=${Namespace}
+                  export DIMENSIONS="--dimensions Environment=${Environ},Index=${Name},Namespace=${Namespace}"
+                  export NITRO_CPU_COUNT=${NitroCPUCount}
+                  export NITRO_MEMORY=${NitroMemory}
+                  export NITRO_ALLOCATED_MEMORY=${NitroMemory}
+                  export NITRO_ALLOCATED_CPU=${NitroCPUCount}
+                  export CLOUDWATCH_PARAM_NAME=${CloudwatchConfigParameter}
+                  export HEALTH_CHECK_PATH=/ping
+                  export HEALTH_CHECK_PORT=8080
+                  export APPLICATION_PORT=8080
+                - NitroCPUCount: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroCPUCount]
+                  NitroMemory: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroMemory]
+                  Name: node-2
+              encoding: plain
+              mode: '000744'
+              owner: root
+              group: root
+            "/etc/nitro_enclaves/allocator.yaml":
+              content:
+                Fn::Sub:
+                - |2
+
+                  ---
+                  memory_mib: ${NitroMemory}
+                  cpu_count: ${NitroCPUCount}
+                - NitroMemory: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroMemory]
+                  NitroCPUCount: !FindInMap [InstanceMappings, !Ref BuilderVaultInstanceType, NitroCPUCount]
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+          commands:
+            '000':
+              command: "/app/setup-cloudwatch.sh"
+            '001':
+              command: systemctl stop enclave.service
+            '002':
+              command: nitro-cli terminate-enclave --all
+            '003':
+              command: systemctl stop nitro-enclaves-allocator.service
+            '004':
+              command: systemctl start nitro-enclaves-allocator.service
+            '005':
+              command: systemctl start enclave.service
+        SetupCfnHup:
+          files:
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content:
+                Fn::Sub:
+                - |
+                  [cfn-auto-reloader-hook]
+                  triggers=post.update
+                  path=Resources.${LogicalId}.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ${LogicalId} --configsets update --region ${AWS::Region}
+                  runas=root
+                - LogicalId: Node2
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+            "/etc/cfn/cfn-hup.conf":
+              content:
+                Fn::Sub: |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+                  interval=1
+              encoding: plain
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                - "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                - "/etc/cfn/cfn-hup.conf"
+        Signal:
+          commands:
+            '000':
+              command:
+                Fn::Sub:
+                - "/opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource
+                  ${LogicalId} --region {AWS::Region}"
+                - LogicalId: Node2
+  Node2PolicySpecific:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Sid: AllowSecretUpdatesThisAccount
+          Action:
+          - secretsmanager:GetSecretValue
+          - secretsmanager:UpdateSecret
+          Condition:
+            StringEquals:
+              secretsmanager:ResourceTag/aws:cloudformation:stack-id: !Sub "${AWS::StackId}"
+          Effect: Allow
+          Resource: "*"
+        - Sid: AllowGetSecretsKMSAccount
+          Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+          Resource:
+            - Fn::Sub:
+                - arn:aws:secretsmanager:*:${NodeKmsAccount}:secret:*
+                - NodeKmsAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref Node2SSMParameter]
+        - Sid: AllowSecretUpdatesKMSAccount
+          Effect: Allow
+          Action:
+            - secretsmanager:UpdateSecret
+          Condition:
+            ForAllValues:StringEquals:
+              secretsmanager:ResourceTag/Namespace: !Sub ${Namespace}
+              secretsmanager:ResourceTag/NodeIndex: 2
+          Resource:
+            - Fn::Sub:
+                - arn:aws:secretsmanager:*:${NodeKmsAccount}:secret:*
+                - NodeKmsAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref Node2SSMParameter]
+        - Sid: KeyAccessForKMSAccount
+          Action:
+          - kms:Decrypt
+          - kms:Encrypt
+          - kms:GenerateDataKey*
+          - kms:ReEncrypt*
+          Effect: Allow
+          Resource:
+            Fn::Sub:
+              - arn:aws:kms:*:${NodeKmsAccount}:key/*
+              - NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref Node2SSMParameter]
+        - Sid: KMSForThisAccount
+          Action:
+          - kms:Decrypt
+          - kms:Encrypt
+          - kms:GenerateDataKey*
+          - kms:ReEncrypt*
+          Condition:
+            ForAnyValue:StringLike:
+              kms:ResourceAliases:
+              - !Sub alias/blockdaemon-${Environ}-${Namespace}
+          Effect: Allow
+          Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
+        - Sid: SSMAccessKMSAccount
+          Action:
+            - ssm:GetParameter
+          Effect: Allow
+          Resource: !Sub "${Node2SSMParameter}"
+        - Action: secretsmanager:GetSecretValue
+          Effect: Allow
+          Resource:
+          - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environ}-${Namespace}-public-key-*
+        - Action:
+          - cloudformation:Describe*
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:DescribeLogStreams
+          - logs:PutLogEvents
+          - s3:ListBucket*
+          - secretsmanager:ListSecrets
+          Effect: Allow
+          Resource: "*"
+        - Action:
+          - s3:GetObject*
+          Effect: Allow
+          Resource:
+            - Fn::Sub:
+              - arn:aws:s3:::${Namespace}-${NodeKmsAccount}-${NodeKmsRegion}-node-2-bucket/node-2/config.toml
+              - NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref Node2SSMParameter]
+                NodeKmsRegion:
+                  Fn::Select:
+                    - 3
+                    - Fn::Split: [":", !Ref Node2SSMParameter]
+          Condition:
+            StringEquals:
+              s3:ResourceAccount:
+                Fn::Sub:
+                  - "${NodeKmsAccount}"
+                  - NodeKmsAccount:
+                      Fn::Select:
+                        - 4
+                        - Fn::Split: [":", !Ref Node2SSMParameter]
+        - Action:
+          - s3:PutObject*
+          Effect: Allow
+          Resource:
+            - Fn::Sub:
+              - arn:aws:s3:::${Namespace}-${NodeKmsAccount}-${NodeKmsRegion}-node-2-bucket/node-2/*
+              - NodeKmsAccount:
+                  Fn::Select:
+                    - 4
+                    - Fn::Split: [":", !Ref Node2SSMParameter]
+                NodeKmsRegion:
+                  Fn::Select:
+                    - 3
+                    - Fn::Split: [":", !Ref Node2SSMParameter]
+          Condition:
+            StringEquals:
+              s3:ResourceAccount:
+                Fn::Sub:
+                  - "${NodeKmsAccount}"
+                  - NodeKmsAccount:
+                      Fn::Select:
+                        - 4
+                        - Fn::Split: [":", !Ref Node2SSMParameter]
+        Version: '2012-10-17'
+      PolicyName: Node2PolicySpecific
+      Roles:
+      - !Ref Node2InstanceRole
+  Node2ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - 'TG2'
+          - !GetAtt ApplicationLoadBalancer.LoadBalancerName
+      HealthCheckPath: "/ping"
+      HealthCheckPort: '8080'
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
+      Port: 8080
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '30'
+      - Key: stickiness.enabled
+        Value: 'false'
+      TargetType: instance
+      Targets:
+      - Id: !Ref Node2
+        Port: 8080
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref ExistingVpcId
+  Node2ALBListenerTargetGroupRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - TargetGroupArn: !Ref Node2ALBTargetGroup
+        Type: forward
+      Conditions:
+      - Field: host-header
+        HostHeaderConfig:
+          Values:
+          - Fn::Sub: node-2-${Namespace}.${HostedZoneName}
+      ListenerArn: !Ref ALBListener443
+      Priority: !If [InternetFacing, 3, 6]
+  FlexNodeTargetPriorityFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FlexNodePriorityFunctionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+  FlexNodeTargetPriorityFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt FlexNodeTargetPriorityFunctionRole.Arn
+      Runtime: python3.11
+      Timeout: 20
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import logging
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+
+
+          def lambda_handler(event, context):
+              LOGGER.info(f"Received flex node ALB target priority calculation event: {event}")
+              resource_properties = event.get("ResourceProperties", None)
+              cfnresponse.send(
+                  event,
+                  context,
+                  "SUCCESS",
+                  {
+                      "Priority": calculate_priority(
+                          resource_properties["NodeIndex"],
+                          resource_properties["InternetFacing"] == "true",
+                      )
+                  },
+              )
+
+
+          def calculate_priority(node_index: str, internet_facing: bool):
+              if internet_facing:
+                  return int(node_index) + 1
+              return int(node_index) + 4
+
+  FlexNodeKmsAccessFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FlexNodeKmsAccessFunctionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: LambdaLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+              - Sid: CfnAccess
+                Action:
+                  - cloudformation:ListStacks
+                  - cloudformation:DescribeStacks
+                Effect: Allow
+                Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*
+              - Sid: KmsAccess
+                Effect: Allow
+                Action:
+                  - kms:PutKeyPolicy
+                  - kms:GetKeyPolicy
+                Resource: !GetAtt BVKmsKey.Arn
+  FlexNodeKmsAccessFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt  FlexNodeKmsAccessFunctionRole.Arn
+      Runtime: python3.11
+      Timeout: 60
+      Environment:
+        Variables:
+          KMS_KEY_ARN: !GetAtt BVKmsKey.Arn
+          CORE_STACK_NAME: !Ref AWS::StackName
+          SSM_PARAMETERS: !Sub "${Node1SSMParameter},${Node2SSMParameter}"
+      Code:
+        ZipFile: |
+          import os
+          import cfnresponse
+          import logging
+          import json
+          import boto3
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+
+          CORE_STACK_NAME = os.environ["CORE_STACK_NAME"]
+          SSM_PARAMETERS = os.environ["SSM_PARAMETERS"].split(",")
+          KMS_KEY_ARN = os.environ["KMS_KEY_ARN"]
+
+          kms_client = boto3.client("kms")
+          cfn_client = boto3.client("cloudformation")
+
+
+          def lambda_handler(event, context):
+              LOGGER.info(f"Received flex node KMS policy event: {event}")
+              account_id = event["ResourceProperties"]["AccountId"]
+              message = f"Account {account_id} "
+              if event["RequestType"] == "Create":
+                  LOGGER.info(
+                      f"Create Event! Adding account {account_id} to key policy if not already present..."
+                  )
+                  if add_account_to_key_policy(account_id):
+                      message += "successfully added to key policy."
+                  else:
+                      message += "not added to key policy."
+              elif event["RequestType"] == "Update":
+                  old_account_id = event["OldResourceProperties"]["AccountId"]
+                  LOGGER.info(
+                      f"Update Event! Adding account {account_id} to key policy if not already present and removing {old_account_id} if it is not the account ID for a different nodes KMS stack..."
+                  )
+                  if update_account_in_key_policy(account_id, old_account_id):
+                      message += f"successfully added to key policy and/or {old_account_id} removed from key policy."
+                  else:
+                      message += f"not added to key policy and {old_account_id} not removed from key policy."
+              else:
+                  LOGGER.info(
+                      f"Delete Event! Removing {account_id} from key policy if it is not the account ID for a different nodes KMS stack..."
+                  )
+                  if remove_account_from_key_policy(account_id):
+                      message += "successfully removed from key policy."
+                  else:
+                      message += "not removed from key policy."
+              LOGGER.info(message)
+              cfnresponse.send(event, context, "SUCCESS", {"Message": message})
+
+
+          def add_account_to_key_policy(account_id):
+              """
+              Add an account to the key policy for the BV infra KMS key.
+              """
+              updated = False
+              root_to_add = f"arn:aws:iam::{account_id}:root"
+              key_policy = get_key_policy()
+              for statement in key_policy["Statement"]:
+                  if statement.get("Sid", "") == "DBSnapshotCopyKmsAccounts":
+                      if isinstance(statement["Principal"]["AWS"], str):
+                          statement["Principal"]["AWS"] = [statement["Principal"]["AWS"]]
+                      if root_to_add not in statement["Principal"]["AWS"]:
+                          LOGGER.info(f"Adding account root {root_to_add} to key policy")
+                          statement["Principal"]["AWS"].append(root_to_add)
+                          updated = True
+                      else:
+                          LOGGER.info(f"Account root {root_to_add} already in key policy")
+              if updated:
+                  LOGGER.info(put_key_policy(key_policy))
+              else:
+                  LOGGER.info("No changes to key policy needed")
+              return updated
+
+
+          def remove_account_from_key_policy(account_id):
+              """
+              Remove an account from the key policy for the BV infra KMS key.
+              """
+              if account_id in find_other_accounts_for_builder_vault():
+                  LOGGER.info(
+                      f"Another KMS stack is located in account {account_id}. Skipping removal..."
+                  )
+                  return False
+              updated = False
+              root_to_remove = f"arn:aws:iam::{account_id}:root"
+              key_policy = get_key_policy()
+              for statement in key_policy["Statement"]:
+                  if statement.get("Sid", "") == "DBSnapshotCopyKmsAccounts":
+                      if isinstance(statement["Principal"]["AWS"], str):
+                          statement["Principal"]["AWS"] = [statement["Principal"]["AWS"]]
+                      if root_to_remove in statement["Principal"]["AWS"]:
+                          LOGGER.info(f"Removing account root {root_to_remove} from key policy")
+                          statement["Principal"]["AWS"].remove(root_to_remove)
+                          updated = True
+                      else:
+                          LOGGER.info(f"Account root {root_to_remove} not in key policy")
+              if updated:
+                  LOGGER.info(put_key_policy(key_policy))
+              else:
+                  LOGGER.info("No changes to key policy needed")
+              return updated
+
+
+          def update_account_in_key_policy(account_id, old_account_id):
+              """
+              Remove an account from the key policy for the BV infra KMS key.
+              """
+              if account_id == old_account_id:
+                  LOGGER.info(
+                      f"Account ID {account_id} and old account ID {old_account_id} are the same. Skipping update..."
+                  )
+                  return False
+              other_accounts = find_other_accounts_for_builder_vault()
+              if account_id in other_accounts and old_account_id in other_accounts:
+                  LOGGER.info(
+                      f"Account ID {account_id} and old account ID {old_account_id} are both accounts where another nodes KMS stack is located. Skipping update..."
+                  )
+                  return False
+              if old_account_id in other_accounts:
+                  LOGGER.info(
+                      f"Old account ID {old_account_id} is account where another nodes KMS stack is located. Just adding {account_id}..."
+                  )
+                  return add_account_to_key_policy(account_id)
+              elif account_id in other_accounts:
+                  LOGGER.info(
+                      f"Account ID {account_id} is account where another nodes KMS stack is located. Just removing {old_account_id}..."
+                  )
+                  return remove_account_from_key_policy(old_account_id)
+              else:
+                  updated = False
+                  root_to_add = f"arn:aws:iam::{account_id}:root"
+                  root_to_remove = f"arn:aws:iam::{old_account_id}:root"
+                  key_policy = get_key_policy()
+                  for statement in key_policy["Statement"]:
+                      if statement.get("Sid", "") == "DBSnapshotCopyKmsAccounts":
+                          if isinstance(statement["Principal"]["AWS"], str):
+                              statement["Principal"]["AWS"] = [statement["Principal"]["AWS"]]
+                          if root_to_remove in statement["Principal"]["AWS"]:
+                              LOGGER.info(
+                                  f"Removing account root {root_to_remove} from key policy"
+                              )
+                              statement["Principal"]["AWS"].remove(root_to_remove)
+                              updated = True
+                          else:
+                              LOGGER.info(f"Account root {root_to_remove} not in key policy")
+                          if root_to_add not in statement["Principal"]["AWS"]:
+                              LOGGER.info(f"Adding account root {root_to_add} to key policy")
+                              statement["Principal"]["AWS"].append(root_to_add)
+                              updated = True
+                          else:
+                              LOGGER.info(f"Account root {root_to_add} already in key policy")
+                  if updated:
+                      LOGGER.info(put_key_policy(key_policy))
+                  else:
+                      LOGGER.info("No changes to key policy needed")
+                  return updated
+
+
+          def find_other_accounts_for_builder_vault():
+              LOGGER.info("Finding other node KMS stack account IDs...")
+              bv_accounts = set([ssm_param.split(":")[4] for ssm_param in SSM_PARAMETERS])
+              paginator = cfn_client.get_paginator("list_stacks")
+              response_iterator = paginator.paginate(
+                  StackStatusFilter=[
+                      "CREATE_COMPLETE",
+                      "UPDATE_COMPLETE",
+                      "IMPORT_COMPLETE",
+                      "UPDATE_ROLLBACK_COMPLETE",
+                      "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+                  ],
+              )
+              for response in response_iterator:
+                  for summary in response["StackSummaries"]:
+                      stack_response = cfn_client.describe_stacks(StackName=summary["StackId"])
+                      for stack in stack_response["Stacks"]:
+                          parameter_map = {
+                              parameter["ParameterKey"]: parameter["ParameterValue"]
+                              for parameter in stack.get("Parameters", [])
+                          }
+                          if (
+                              "BuilderVaultInstanceType" in parameter_map
+                              and parameter_map.get("CoreNodesStackName", None) == CORE_STACK_NAME
+                          ):
+                              bv_accounts.add(parameter_map["NodeSSMParameter"].split(":")[4])
+              LOGGER.info(f"Found other node KMS stack account IDs: {bv_accounts}")
+              return list(bv_accounts)
+
+
+          def put_key_policy(key_policy):
+              """
+              Put the key policy for the BV infra KMS key.
+              """
+              LOGGER.info("Updating key policy...")
+              response = kms_client.put_key_policy(
+                  KeyId=KMS_KEY_ARN,
+                  Policy=json.dumps(key_policy),
+                  PolicyName="default",
+              )
+              return response
+
+
+          def get_key_policy():
+              """
+              Get the key policy for the BV infra KMS key.
+              """
+              LOGGER.info("Getting key policy...")
+              response = kms_client.get_key_policy(
+                  KeyId=KMS_KEY_ARN,
+                  PolicyName="default",
+              )
+              LOGGER.info(response)
+              return json.loads(response["Policy"])
+
+  Dashboard:
+    Type: "AWS::CloudWatch::Dashboard"
+    Properties:
+      DashboardName: !Sub "${Namespace}-${Environ}-core-nodes"
+      DashboardBody: !Sub
+        - |
+          {
+            "widgets": [
+                {
+                    "type": "text",
+                    "width": 24,
+                    "height": 1,
+                    "x": 0,
+                    "y": 0,
+                    "properties": {
+                        "markdown": "## Builder Vault Nodes",
+                        "background": "transparent"
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 3,
+                    "height": 4,
+                    "x": 0,
+                    "y": 1,
+                    "properties": {
+                        "view": "singleValue",
+                        "title": "Node-1 Restarts",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "${Namespace}",
+                                "NitroRestart",
+                                "Environment",
+                                "${Environ}",
+                                "Index",
+                                "node-1",
+                                "Namespace",
+                                "${Namespace}",
+                                {
+                                    "color": "#d62728",
+                                    "stat": "Sum"
+                                }
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 3,
+                    "height": 4,
+                    "x": 3,
+                    "y": 1,
+                    "properties": {
+                        "view": "singleValue",
+                        "title": "Node-1 Status",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "${Namespace}",
+                                "NitroStatus",
+                                "Environment",
+                                "${Environ}",
+                                "Index",
+                                "node-1",
+                                "Namespace",
+                                "${Namespace}",
+                                {
+                                    "color": "#2ca02c"
+                                }
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 6,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-1 CPU Utilization",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "CPUUtilization",
+                                "InstanceId",
+                                "${Node1}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 12,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-1 Network In",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "NetworkIn",
+                                "InstanceId",
+                                "${Node1}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 18,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-1 Network Out",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "NetworkOut",
+                                "InstanceId",
+                                "${Node1}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                
+                {
+                    "type": "metric",
+                    "width": 3,
+                    "height": 4,
+                    "x": 0,
+                    "y": 1,
+                    "properties": {
+                        "view": "singleValue",
+                        "title": "Node-2 Restarts",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "${Namespace}",
+                                "NitroRestart",
+                                "Environment",
+                                "${Environ}",
+                                "Index",
+                                "node-2",
+                                "Namespace",
+                                "${Namespace}",
+                                {
+                                    "color": "#d62728",
+                                    "stat": "Sum"
+                                }
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 3,
+                    "height": 4,
+                    "x": 3,
+                    "y": 1,
+                    "properties": {
+                        "view": "singleValue",
+                        "title": "Node-2 Status",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "${Namespace}",
+                                "NitroStatus",
+                                "Environment",
+                                "${Environ}",
+                                "Index",
+                                "node-2",
+                                "Namespace",
+                                "${Namespace}",
+                                {
+                                    "color": "#2ca02c"
+                                }
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 6,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-2 CPU Utilization",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "CPUUtilization",
+                                "InstanceId",
+                                "${Node2}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 12,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-2 Network In",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "NetworkIn",
+                                "InstanceId",
+                                "${Node2}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 4,
+                    "x": 18,
+                    "y": 1,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "Node-2 Network Out",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/EC2",
+                                "NetworkOut",
+                                "InstanceId",
+                                "${Node2}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 6,
+                    "x": 0,
+                    "y": 10,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "RDS CPU Utilization",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/RDS",
+                                "CPUUtilization",
+                                "DBClusterIdentifier",
+                                "${DbCluster}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 6,
+                    "x": 6,
+                    "y": 10,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "RDS Connections",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/RDS",
+                                "DatabaseConnections",
+                                "DBClusterIdentifier",
+                                "${DbCluster}",
+                                {
+                                    "stat": "Sum"
+                                }
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 6,
+                    "x": 12,
+                    "y": 10,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "RDS Freeable Memory",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/RDS",
+                                "FreeableMemory",
+                                "DBClusterIdentifier",
+                                "${DbCluster}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 6,
+                    "x": 18,
+                    "y": 10,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "RDS Network Throughput",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/RDS",
+                                "NetworkThroughput",
+                                "DBClusterIdentifier",
+                                "${DbCluster}"
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "text",
+                    "width": 24,
+                    "height": 1,
+                    "x": 0,
+                    "y": 23,
+                    "properties": {
+                        "markdown": "## Application Load Balancer",
+                        "background": "transparent"
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 6,
+                    "x": 0,
+                    "y": 24,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "ALB Request Count",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/ApplicationELB",
+                                "RequestCount",
+                                "LoadBalancer",
+                                "${ApplicationLoadBalancer.LoadBalancerFullName}",
+                                {
+                                    "stat": "Sum"
+                                }
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 6,
+                    "x": 6,
+                    "y": 24,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "ALB HTTP 4XX Errors",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/ApplicationELB",
+                                "HTTPCode_Target_4XX_Count",
+                                "LoadBalancer",
+                                "${ApplicationLoadBalancer.LoadBalancerFullName}",
+                                {
+                                    "stat": "Sum"
+                                }
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                },
+                {
+                    "type": "metric",
+                    "width": 6,
+                    "height": 6,
+                    "x": 12,
+                    "y": 24,
+                    "properties": {
+                        "view": "timeSeries",
+                        "title": "ALB HTTP 5XX Errors",
+                        "region": "${AWS::Region}",
+                        "metrics": [
+                            [
+                                "AWS/ApplicationELB",
+                                "HTTPCode_Target_5XX_Count",
+                                "LoadBalancer",
+                                "${ApplicationLoadBalancer.LoadBalancerFullName}",
+                                {
+                                    "stat": "Sum"
+                                }
+                            ]
+                        ],
+                        "yAxis": {}
+                    }
+                }
+
+            ]
+          }
+        - Namespace: !Ref Namespace
+          Environ: !Ref Environ
+Outputs:
+  Namespace:
+    Description: The Builder Vault namespace for this stack
+    Value: !Ref Namespace
+    Export:
+      Name: !Sub ${AWS::StackName}-Namespace
+  HostedZoneId:
+    Description: The ID of the Builder Vault DNS hosted zone
+    Value: !Ref HostedZoneId
+    Export:
+      Name: !Sub ${AWS::StackName}-HostedZoneId
+  HostedZoneName:
+    Description: The name of the Builder Vault DNS hosted zone
+    Value: !Ref HostedZoneName
+    Export:
+      Name: !Sub ${AWS::StackName}-HostedZoneName
+  Environ:
+    Description: The environment name for this stack
+    Value: !Ref Environ
+    Export:
+      Name: !Sub ${AWS::StackName}-Environ
+  Node1P2PDNS:
+    Description: P2P connection DNS name for node 1 (used for mobile node connections)
+    Value: !Sub node-1-p2p-${Namespace}.${HostedZoneName}
+    Export:
+      Name: !Sub ${AWS::StackName}-Node1P2PDNS
+  Node1DNS:
+    Description: SDK connection DNS name for node 1
+    Value: !Sub node-1-${Namespace}.${HostedZoneName}
+    Export:
+      Name: !Sub ${AWS::StackName}-Node1DNS
+  Node2P2PDNS:
+    Description: P2P connection DNS name for node 2 (used for mobile node connections)
+    Value: !Sub node-2-p2p-${Namespace}.${HostedZoneName}
+    Export:
+      Name: !Sub ${AWS::StackName}-Node2P2PDNS
+  Node2DNS:
+    Description: SDK connection DNS name for node 2
+    Value: !Sub node-2-${Namespace}.${HostedZoneName}
+    Export:
+      Name: !Sub ${AWS::StackName}-Node2DNS
+  ALBListenerArn:
+    Description: ARN for the load balancer listener (port 443)
+    Value: !Ref ALBListener443
+    Export:
+      Name: !Sub ${AWS::StackName}-ALBListenerArn
+  ALBName:
+    Description: Shorthand name of the load balancer
+    Value: !GetAtt ApplicationLoadBalancer.LoadBalancerName
+    Export:
+      Name: !Sub ${AWS::StackName}-ALBName
+  ALBDnsName:
+    Description: Internal DNS name for the load balancer
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}-ALBDnsName
+  ALBCanonicalHostedZoneID:
+    Description: Canonical hosted zone ID name for the load balancer
+    Value: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID
+    Export:
+      Name: !Sub ${AWS::StackName}-ALBCanonicalHostedZoneID
+  NLBSecurityGroup:
+    Description: Security Group for the p2p network load balancers mobile nodes connect to
+    Value: !Ref NLBSg
+    Export:
+      Name: !Sub ${AWS::StackName}-NLBSecurityGroup
+  NLBScheme:
+    Description: Either 'internet-facing' or 'internal' depending on whether or not this Builder Vault was deloyed as InternetFacing or not
+    Value:
+      Fn::If:
+      - InternetFacing
+      - internet-facing
+      - internal
+    Export:
+      Name: !Sub ${AWS::StackName}-NLBScheme
+  NLBSubnet1:
+    Description: First subnet used for NLBs in this Builder Vault
+    Value:
+      Fn::If:
+      - InternetFacing
+      - !If [CreateVpc, !Ref VpcPublicSubnet1, !Ref ExistingPublicSubnetId1]
+      - !If [CreateVpc, !Ref VpcPrivateSubnet1, !Ref ExistingPrivateSubnetId1]
+    Export:
+      Name: !Sub ${AWS::StackName}-NLBSubnet1
+  NLBSubnet2:
+    Description: Second subnet used for NLBs in this Builder Vault
+    Value:
+      Fn::If:
+      - InternetFacing
+      - !If [CreateVpc, !Ref VpcPublicSubnet2, !Ref ExistingPublicSubnetId2]
+      - !If [CreateVpc, !Ref VpcPrivateSubnet2, !Ref ExistingPrivateSubnetId2]
+    Export:
+      Name: !Sub ${AWS::StackName}-NLBSubnet2
+  NodeSecurityGroup:
+    Description: Security Group for the Builder Vault nodes
+    Value: !Ref NodeSg
+    Export:
+      Name: !Sub ${AWS::StackName}-NodeSecurityGroup
+  DbSecret:
+    Description: RDS DB connection info secret
+    Value: !Ref DbSecretAttachment
+    Export:
+      Name: !Sub ${AWS::StackName}-DbSecret
+  CloudwatchConfigParameter:
+    Description: Cloudwatch config for builder vault ec2 instances
+    Value: !Ref CloudwatchConfigParameter
+    Export:
+      Name: !Sub ${AWS::StackName}-CloudwatchConfigParameter
+  CloudmapNamespace:
+    Description: Cloudmap namespace used for internal p2p communication between nodes
+    Value: !Ref CloudMapNamespace
+    Export:
+      Name: !Sub ${AWS::StackName}-CloudmapNamespace
+  InternetFacing:
+    Description: Export value is "true" if public subnets are available in Builder Vault VPC, else "false"
+    Value: !Ref InternetFacing
+    Export:
+      Name: !Sub ${AWS::StackName}-InternetFacing
+  VpcId:
+    Description: ID of VPC in which Builder Vault nodes are deployed
+    Value: !If
+      - CreateVpc
+      - !Ref Vpc
+      - !Ref ExistingVpcId
+    Export:
+      Name: !Sub ${AWS::StackName}-VpcId
+  PrivateSubnet1:
+    Description: Private subnet 1 for Builder Vault VPC
+    Value: !If
+      - CreateVpc
+      - !Ref VpcPrivateSubnet1
+      - !Ref ExistingPrivateSubnetId1
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnet1
+  BuilderVaultKmsKeyARN:
+    Description: ARN for the Builder Vault infra KMS key
+    Value: !GetAtt BVKmsKey.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-BuilderVaultKmsKeyARN
+  FlexNodePriorityFunctionARN:
+    Description: ARN for the lambda function that backs flex node load balancer target priority custom resources.
+    Value: !GetAtt FlexNodeTargetPriorityFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-FlexNodePriorityFunctionARN
+  FlexNodeKmsAccessFunctionARN:
+    Description: ARN for the lambda function that backs flex node custom resources used to ensure KMS policy access required for db snapshot sharing is configured.
+    Value: !GetAtt FlexNodeKmsAccessFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-FlexNodeKmsAccessFunctionARN

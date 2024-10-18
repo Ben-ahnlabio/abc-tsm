@@ -1,0 +1,712 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: |
+  ABC TSM Core Stack
+Parameters:
+  NodeAWSAccount:
+    Type: String
+    Description: The AWS account where the TSM node is deployed.
+    AllowedPattern: ^\d{12}$
+    ConstraintDescription:
+      Must be a valid AWS account ID. Ensure that it is the AWS
+      account of the Builder Vault that you will allow to access the node.
+    Default: "915486611144"
+  Environ:
+    Type: String
+    Default: builder-vault
+    Description: Optional environment name to use for the Builder Vault prefix
+    MaxLength: 13
+  Namespace:
+    Type: String
+    MaxLength: 30
+    AllowedPattern: ^[a-z]*$
+    ConstraintDescription: Must be up to 30 characters, and can only include lowercase letters.
+    Description: A Unique namespace for the Builder Vault.
+    Default: abcdev
+  NodeIndex:
+    Type: String
+    Description:
+      The index of the node. This must correspond to the Builder Vault
+      node index that this key will be used for.
+    AllowedValues:
+      - "1"
+      - "2"
+    Default: "2"
+  DeletePolicy:
+    Type: String
+    Default: Delete
+    AllowedValues:
+      - Delete
+      - Retain
+    Description: |
+      The policy to apply when the stack is deleted. Only use Delete if you
+      want to delete the resources created by this stack. Retain will keep the resources
+      and you will have to manually delete them.
+  AnotherNodeSSMParameter:
+    Type: String
+    Description: The SSM parameter ARN for the Builder Vault node.  The KMS stack for node  needs to be deployed before this parameter is populated. For more information, please check https://builder-vault-tsm.docs.blockdaemon.com/docs/getting-started-aws#deploy-kms-stack
+    AllowedPattern: "arn:aws:ssm:[a-zA-Z0-9-]+:\\d{12}:parameter/[a-zA-Z0-9/_-]+"
+    Default: "arn:aws:ssm:ap-northeast-2:915486611144:parameter/blockdaemon/abcdev/node-bootstrap-parameter-1"
+  VpcCidr:
+    Type: String
+    Description: The CIDR block to use for the VPC
+    Default: 10.110.0.0/24
+  VpcCidrBlockPublicSubnet1:
+    Type: String
+    Description: The CIDR block to use for the public subnet 1
+    Default: 10.110.0.0/26
+  VpcCidrBlockPublicSubnet2:
+    Type: String
+    Description: The CIDR block to use for the public subnet 2
+    Default: 10.110.0.64/26
+  VpcCidrBlockPrivateSubnet1:
+    Type: String
+    Description: The CIDR block to use for the private subnet 1
+    Default: 10.110.0.128/26
+  VpcCidrBlockPrivateSubnet2:
+    Type: String
+    Description: The CIDR block to use for the private subnet 2
+    Default: 10.110.0.192/26
+  AMIID:
+    Type: String
+    Default: ami-0ea3fa8219e0bafb3
+    Description: The AMI to use for the abc tsm node
+  HostedZoneName:
+    Type: String
+    Description: The HostedZoneName to use for the Builder Vault
+    AllowedPattern: "[a-zA-Z0-9.-]{1,50}"
+    Default: dev-tsm.myabcwallet.com
+  HostedZoneId:
+    Type: String
+    Description: The HostedZoneId to use for the Builder Vault
+    AllowedPattern: "[A-Z0-9]{8,32}"
+    Default: Z04922103N0D8EUGMA5SZ
+
+  BuilderVaultInstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - c6i.2xlarge
+      - c6i.xlarge
+      - m6i.2xlarge
+      - m6i.xlarge
+      - r6i.2xlarge
+      - r6i.xlarge
+      - t3.micro
+    Description: The instance type to use for the Builder Vault nodes
+
+  DatabaseInstanceType:
+    Type: String
+    Default: t4g.medium
+    AllowedValues:
+      - r6g.2xlarge
+      - r6g.large
+      - r6g.xlarge
+      - r6i.2xlarge
+      - r6i.large
+      - r6i.xlarge
+      - t4g.medium
+    Description:
+      The instance type to use for the database. Will prefix the instance
+      class with `db.`
+
+  DatabaseEngineVersion:
+    Type: String
+    Default: "15.3"
+    Description: The engine version to use for the database
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc
+  VpcPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Ref VpcCidrBlockPublicSubnet1
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet1
+      VpcId: !Ref Vpc
+  VpcPublicSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet1
+  VpcPublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VpcPublicSubnet1RouteTable
+      SubnetId: !Ref VpcPublicSubnet1
+  VpcPublicSubnet1DefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VpcInternetGateway
+      RouteTableId: !Ref VpcPublicSubnet1RouteTable
+    DependsOn:
+      - VpcInternetGatewayAttachment
+  VpcPublicSubnet1EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet1
+  VpcPublicSubnet1NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt VpcPublicSubnet1EIP.AllocationId
+      SubnetId: !Ref VpcPublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet1
+    DependsOn:
+      - VpcPublicSubnet1DefaultRoute
+      - VpcPublicSubnet1RouteTableAssociation
+  VpcPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Ref VpcCidrBlockPublicSubnet2
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet2
+      VpcId: !Ref Vpc
+  VpcPublicSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PublicSubnet2
+  VpcPublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VpcPublicSubnet2RouteTable
+      SubnetId: !Ref VpcPublicSubnet2
+  VpcPublicSubnet2DefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VpcInternetGateway
+      RouteTableId: !Ref VpcPublicSubnet2RouteTable
+    DependsOn:
+      - VpcInternetGatewayAttachment
+  VpcPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Ref VpcCidrBlockPrivateSubnet1
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PrivateSubnet1
+      VpcId: !Ref Vpc
+  VpcPrivateSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PrivateSubnet1
+  VpcPrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VpcPrivateSubnet1RouteTable
+      SubnetId: !Ref VpcPrivateSubnet1
+  VpcPrivateSubnet1DefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref VpcPublicSubnet1NATGateway
+      RouteTableId: !Ref VpcPrivateSubnet1RouteTable
+  VpcPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref AWS::Region
+      CidrBlock: !Ref VpcCidrBlockPrivateSubnet2
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PrivateSubnet2
+      VpcId: !Ref Vpc
+  VpcPrivateSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc/PrivateSubnet2
+  VpcPrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VpcPrivateSubnet2RouteTable
+      SubnetId: !Ref VpcPrivateSubnet2
+  VpcPrivateSubnet2DefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref VpcPublicSubnet1NATGateway
+      RouteTableId: !Ref VpcPrivateSubnet2RouteTable
+  VpcInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environ}-${Namespace}-vpc
+  VpcInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref VpcInternetGateway
+      VpcId: !Ref Vpc
+
+  BVKmsKey:
+    Type: AWS::KMS::Key
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      Description: KMS key for Blockdaemon Builder Vault
+      EnableKeyRotation: true
+      KeyPolicy:
+        Statement:
+          - Action: kms:*
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Resource: "*"
+          - Action:
+              - kms:CreateGrant
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+              - kms:ReEncrypt*
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub secretsmanager.${AWS::Region}.amazonaws.com
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Resource: "*"
+        Version: "2012-10-17"
+
+  BVKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/blockdaemon-${Environ}-${Namespace}
+      TargetKeyId: !GetAtt BVKmsKey.Arn
+
+  DbSecret:
+    Type: AWS::SecretsManager::Secret
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      Description: !Sub "Database secret for Blockdemon Builder Vault static nodes for ${Namespace}"
+      GenerateSecretString:
+        ExcludeCharacters: '''"\`~!@#$%^&*()_+=[]{}|;:,.<>?/ '
+        GenerateStringKey: password
+        PasswordLength: 30
+        SecretStringTemplate: '{"username":"tsmadmin"}'
+      KmsKeyId: !GetAtt BVKmsKey.Arn
+      Name: !Sub ${Environ}-${Namespace}-db-secret
+
+  DbClusterSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${Environ}-${Namespace}/db-cluster-sg
+      SecurityGroupEgress:
+        - CidrIp: 255.255.255.255/32
+          Description: Disallow all traffic
+          FromPort: 252
+          IpProtocol: icmp
+          ToPort: 86
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !GetAtt NodeSg.GroupId
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+      VpcId: !Ref Vpc
+  DbClusterIngressSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: allow self connection on 5432
+      FromPort: 5432
+      GroupId: !GetAtt DbClusterSg.GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt DbClusterSg.GroupId
+      ToPort: 5432
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets for builder vault database
+      SubnetIds:
+        - !Ref VpcPrivateSubnet1
+        - !Ref VpcPrivateSubnet2
+
+  DbCluster:
+    Type: AWS::RDS::DBCluster
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      BackupRetentionPeriod: 30
+      CopyTagsToSnapshot: true
+      DBClusterParameterGroupName: default.aurora-postgresql15
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      DatabaseName:
+        Fn::Join:
+          - ""
+          - - bd
+            - Fn::Join: ["", !Split ["-", !Ref Namespace]]
+      EnableCloudwatchLogsExports:
+        - postgresql
+      Engine: aurora-postgresql
+      EngineVersion: !Ref DatabaseEngineVersion
+      KmsKeyId: !GetAtt BVKmsKey.Arn
+      MasterUserPassword:
+        !Join [
+          "",
+          [
+            "{{resolve:secretsmanager:",
+            !Ref DbSecret,
+            ":SecretString:password::}}",
+          ],
+        ]
+      MasterUsername: tsmadmin
+      Port: 5432
+      StorageEncrypted: true
+      VpcSecurityGroupIds:
+        - !GetAtt DbClusterSg.GroupId
+  DbWriter:
+    Type: AWS::RDS::DBInstance
+    UpdateReplacePolicy: !Ref DeletePolicy
+    DeletionPolicy: !Ref DeletePolicy
+    Properties:
+      CACertificateIdentifier: rds-ca-rsa4096-g1
+      DBClusterIdentifier: !Ref DbCluster
+      DBInstanceClass: !Join ["", ["db.", !Ref DatabaseInstanceType]]
+      Engine: aurora-postgresql
+      PromotionTier: 0
+  DbSecretAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref DbSecret
+      TargetId: !Ref DbCluster
+      TargetType: AWS::RDS::DBCluster
+
+  NLBSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for network load balancer for Nnode
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 9000
+          ToPort: 9000
+          Description: Allow MPC inbound traffic from the internet
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          Description: Allow SDK inbound traffic from the internet
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+
+  NodeSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for builder vault node
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !GetAtt NLBSg.GroupId
+          IpProtocol: tcp
+          FromPort: 9000
+          ToPort: 9000
+          Description: Allow MPC inbound traffic from the network load balancer
+        - SourceSecurityGroupId: !GetAtt NLBSg.GroupId
+          IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          Description: Allow SDK inbound traffic from the network load balancer
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+
+  NodeNlbMPCTarget:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPort: "9000"
+      HealthCheckProtocol: TCP
+      Name: !Sub tg-mpc-${NodeNetworkLoadBalancerV2.LoadBalancerName}
+      Port: 9000
+      Protocol: TCP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+        - Key: proxy_protocol_v2.enabled
+          Value: "false"
+      TargetType: instance
+      Targets:
+        - Id: !Ref Node
+          Port: 9000
+      VpcId: !Ref Vpc
+
+  NodeNlbMPCListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref NodeNlbMPCTarget
+          Type: forward
+      LoadBalancerArn: !Ref NodeNetworkLoadBalancerV2
+      Port: 9000
+      Protocol: TCP
+
+  NodeNetworkLoadBalancerV2:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub nlb-tsm-node-${NodeIndex}-${Namespace}-v2
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: "false"
+      Scheme: internet-facing
+      SecurityGroups:
+        - !GetAtt NLBSg.GroupId
+      Subnets:
+        - !Ref VpcPublicSubnet1
+        - !Ref VpcPrivateSubnet2
+      Type: network
+
+  NodeNLBRecordset:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt NodeNetworkLoadBalancerV2.DNSName
+        HostedZoneId: !GetAtt NodeNetworkLoadBalancerV2.CanonicalHostedZoneID
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub tsm-node-${NodeIndex}-0.${HostedZoneName}
+      SetIdentifier: !Sub node-1-${NodeNetworkLoadBalancerV2.LoadBalancerName}
+      Type: A
+      Weight: 100
+
+  NodeNLBApiTarget:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPort: "8000"
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: "/ping"
+      Name: !Sub tg-api-${NodeNetworkLoadBalancerV2.LoadBalancerName}
+      Port: 8000
+      Protocol: TCP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+        - Key: proxy_protocol_v2.enabled
+          Value: "false"
+      TargetType: instance
+      Targets:
+        - Id: !Ref Node
+          Port: 8000
+      VpcId: !Ref Vpc
+
+  NodeNlbAPIListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref NodeNLBApiTarget
+          Type: forward
+      LoadBalancerArn: !Ref NodeNetworkLoadBalancerV2
+      Port: 8000
+      Protocol: TCP
+
+  CloudMapNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Description: !Sub ${Namespace} namespace for Builder Vault
+      Name: !Sub tsm-${Namespace}
+      Vpc: !Ref Vpc
+
+  CloudMapServiceNode:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: !Sub ${Namespace}-node-${NodeIndex} service for Builder Vault
+      DnsConfig:
+        DnsRecords:
+          - TTL: 300
+            Type: A
+        RoutingPolicy: MULTIVALUE
+      Name: !Sub tsm-node-${NodeIndex}-0
+      NamespaceId: !Ref CloudMapNamespace
+
+  CloudMapServiceInstanceNode:
+    Type: AWS::ServiceDiscovery::Instance
+    Properties:
+      InstanceAttributes:
+        TSM_TYPE: "static"
+        NODE_INDEX: !Sub ${NodeIndex}
+        AWS_INSTANCE_IPV4: !Sub "${Node.PrivateIp}"
+      InstanceId: !Ref Node
+      ServiceId: !Ref CloudMapServiceNode
+
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: |
+        The IAM role for Builder Vault node 1 instance profile. The nodes will have a default policy that will include the permissions for SSM parameters on bootstrapping configuration,
+        as well as cloudformation signals. Additionally, SSM Managed Instance Core and CloudWatchAgentServerPolicy are attached to the role for metrics and connecting to the Nodes via SSM.
+        There will be an additional policy attached per node that will allow the Builder Vault node to access logs, secrets for its resources, and the KMS key for the Nitro Enclave.
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  NodeDefaultPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: NodeDefaultPolicy
+      Roles:
+        - Ref: NodeInstanceRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - cloudformation:DescribeStackResource
+              - cloudformation:SignalResource
+            Effect: Allow
+            Resource: !Ref AWS::StackId
+
+          - Sid: AllowParameterAccess
+            Action:
+              - ssm:GetParameter
+              - ssm:DescribeParameters
+            Effect: Allow
+            Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+
+          - Sid: KMSforThisAccount
+            Action:
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+              - kms:ReEncrypt*
+            Effect: Allow
+            Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*
+
+          - Sid: SecretsForThisAccount
+            Action:
+              - secretsmanager:GetSecretValue
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:builder-vault-${Namespace}-secret-api-keys-node-*
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:builder-vault-${Namespace}-node-private-key-node-*
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:builder-vault-${Namespace}-master-encryption-key-node-*
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:builder-vault-${Namespace}-db-secret-*
+
+          - Sid: KeyAccessForAnotherAccount
+            Action:
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+              - kms:ReEncrypt*
+            Effect: Allow
+            Resource:
+              Fn::Sub:
+                - arn:aws:kms:*:${AnotherNodeAccount}:key/*
+                - AnotherNodeAccount:
+                    Fn::Select:
+                      - 4
+                      - Fn::Split: [":", !Ref AnotherNodeSSMParameter]
+
+          - Sid: AllowGetSecretsAnotherAccount
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource:
+              - Fn::Sub:
+                  - arn:aws:secretsmanager:*:${AnotherNodeAccount}:secret:*
+                  - AnotherNodeAccount:
+                      Fn::Select:
+                        - 4
+                        - Fn::Split: [":", !Ref AnotherNodeSSMParameter]
+
+  NodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref NodeInstanceRole
+    DependsOn:
+      - NodeNetworkLoadBalancerV2
+
+  Node:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AMIID
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      InstanceType: !Ref BuilderVaultInstanceType
+      KeyName: ben-pc
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !GetAtt NodeSg.GroupId
+          SubnetId: !Ref VpcPublicSubnet1
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo "Starting Builder Vault Node ${NodeIndex}"
+          export NODE_INDEX=${NodeIndex}
+          export HOSTED_ZONE_NAME=${HostedZoneName}
+          export THIS_PLAYER_ADDRESS=tsm-node-${NodeIndex}-0.${HostedZoneName}
+          export APPLICATION_ID=${Namespace}-${NodeIndex}
+          cd /home/ec2-user/tsm && ./params.sh arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Namespace}/tsm/node-bootstrap-parameter-${NodeIndex} ${AnotherNodeSSMParameter} ${DbSecret}
+          cd /home/ec2-user/tsm && ./run.sh ${NodeIndex}
+    DependsOn:
+      - NodeNetworkLoadBalancerV2
+      - NodeInstanceProfile
+      - NodeInstanceRole
+      - NodeDefaultPolicy
+      - VpcInternetGateway
+      - DbSecret
+
+Outputs:
+  Namespace:
+    Description: The Builder Vault namespace for this stack
+    Value: !Ref Namespace
+    Export:
+      Name: !Sub ${AWS::StackName}-Namespace
+  VpcId:
+    Description: ID of VPC in which Builder Vault nodes are deployed
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub ${AWS::StackName}-VpcId

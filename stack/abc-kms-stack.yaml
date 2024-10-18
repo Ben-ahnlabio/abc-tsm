@@ -1,0 +1,283 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: |
+  ABC TSM KMS Stack
+Parameters:
+  NodeAWSAccount:
+    Type: String
+    Description: The AWS account where the TSM node is deployed.
+    AllowedPattern: '^\d{12}$'
+    ConstraintDescription: Must be a valid AWS account ID. Ensure that it is the AWS account of the Builder Vault that you will allow to access the node.
+  Namespace:
+    Type: String
+    MaxLength: 30
+    AllowedPattern: "^[a-z]*$"
+    ConstraintDescription: Must be up to 30 characters, and can only include lowercase letters.
+    Description: A Unique namespace for the Builder Vault.
+    Default: abcdev
+  NodeIndex:
+    Type: String
+    Description: The index of the node. This must correspond to the Builder Vault node index that this key will be used for.
+    AllowedValues:
+      - "1"
+      - "2"
+  DeletePolicy:
+    Type: String
+    Default: Delete
+    AllowedValues:
+      - Delete
+      - Retain
+    Description: |
+      The policy to apply when the stack is deleted. Only use Delete if you
+      want to delete the resources created by this stack. Retain will keep the resources
+      and you will have to manually delete them.
+  CreatorFunctionS3Bucket:
+    Type: String
+    Description: The S3 bucket where the creator function code is stored.
+    Default: abc-tsm
+  CreatorFunctionS3Key:
+    Type: String
+    Description: The S3 key where the creator function code is stored.
+    Default: function/ApiKeyCreatorFunction.zip
+
+Resources:
+  NodeSecretManagerKMSKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS Key for encrypting secrets manager secrets. This is only used for secrets manager cross account access.
+      EnableKeyRotation: true
+      Enabled: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: account-permissions
+        Statement:
+          - Sid: Enable Access for Root
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - kms:*
+            Resource: "*"
+          - Sid: Restricted Access for Target Account
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${NodeAWSAccount}:root
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:CallerAccount: !Sub ${NodeAWSAccount}
+                kms:ViaService: !Sub secretsmanager.${AWS::Region}.amazonaws.com
+
+  NodeBootstrapParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Namespace}/tsm/node-bootstrap-parameter-${NodeIndex}"
+      Tier: Advanced
+      Type: String
+      # value will be a json string of the KMS key id, the secrets manager location of the api keys, and the secrets manager location of the master encryption key
+      Value: !Sub >
+        {
+          "NODE_KMS_KEY_SECRETS_MANAGER_ARN": "${NodeSecretManagerKMSKey.Arn}",
+          "NODE_PRIVATE_KEY_SECRET_ARN": "${NodePrivateKey}",
+          "NODE_PUBLIC_KEY_SECERT_ARN": "${NodePublicKey}",
+          "NODE_API_KEY_SECRET_ARN": "${NodeAPIKey}",
+          "NODE_MASTER_ENCRYPTION_KEY_SECRET_ARN": "${NodeMasterEncryptionKey}"
+        }
+
+  NodeSSMParameterShare:
+    Type: AWS::RAM::ResourceShare
+    Properties:
+      Name: !Sub "${Namespace}-node-ssm-parameter-share-${NodeIndex}"
+      Principals:
+        - !Ref NodeAWSAccount
+      ResourceArns:
+        - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NodeBootstrapParameter}"
+      AllowExternalPrincipals: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${Namespace}-node-ssm-parameter-share"
+
+  NodeAPIKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "builder-vault-${Namespace}-secret-api-keys-node-${NodeIndex}"
+      Description: !Sub "API Key for builder vault node ${NodeIndex}"
+      KmsKeyId: !Ref NodeSecretManagerKMSKey
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+        - Key: Namespace
+          Value: !Sub ${Namespace}
+        - Key: NodeIndex
+          Value: !Sub ${NodeIndex}
+
+  NodePrivateKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "builder-vault-${Namespace}-node-private-key-node-${NodeIndex}"
+      Description: !Sub "Node Private Key for builder vault node ${NodeIndex}"
+      KmsKeyId: !Ref NodeSecretManagerKMSKey
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+        - Key: Namespace
+          Value: !Sub ${Namespace}
+        - Key: NodeIndex
+          Value: !Sub ${NodeIndex}
+
+  NodePublicKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "builder-vault-${Namespace}-node-public-key-node-${NodeIndex}"
+      Description: !Sub "Node Public Key for builder vault node ${NodeIndex}"
+      KmsKeyId: !Ref NodeSecretManagerKMSKey
+      GenerateSecretString:
+        PasswordLength: 1
+        RequireEachIncludedType: False
+      Tags:
+        - Key: Namespace
+          Value: !Sub ${Namespace}
+        - Key: NodeIndex
+          Value: !Sub ${NodeIndex}
+
+  NodePublicKeySecretResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref NodePublicKey
+      ResourcePolicy: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "${NodeAWSAccount}"
+              },
+              "Action": [
+                "secretsmanager:GetSecretValue"
+              ],
+              "Resource": "${NodePublicKey}"
+            }
+          ]
+        }
+
+  NodeMasterEncryptionKey:
+    DeletionPolicy: !Sub ${DeletePolicy}
+    UpdateReplacePolicy: !Sub ${DeletePolicy}
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "builder-vault-${Namespace}-master-encryption-key-node-${NodeIndex}"
+      Description: !Sub DB master encryptor password for builder vault node ${NodeIndex}
+      KmsKeyId: !Ref NodeSecretManagerKMSKey
+      GenerateSecretString:
+        PasswordLength: 10
+        RequireEachIncludedType: False
+      Tags:
+        - Key: Namespace
+          Value: !Sub ${Namespace}
+        - Key: NodeIndex
+          Value: !Sub ${NodeIndex}
+
+  APIKeyCreatorFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: APIKeyCreatorFunctionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                  - kms:DescribeKey
+                  - kms:ReEncrypt
+                Resource:
+                  - !GetAtt NodeSecretManagerKMSKey.Arn
+              - Effect: Allow
+                Action:
+                  - secretsmanager:PutSecretValue
+                Resource:
+                  - !Sub ${NodeAPIKey}
+                  - !Sub ${NodePrivateKey}
+                  - !Sub ${NodePublicKey}
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*"
+
+  APIKeyCreatorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: app.lambda_handler
+      Role: !GetAtt APIKeyCreatorFunctionRole.Arn
+      Runtime: python3.11
+      Timeout: 20
+      Environment:
+        Variables:
+          NODE_API_KEY_SECRET_ARN: !Ref NodeAPIKey
+          NODE_PRIVATE_KEY_SECRET_ARN: !Ref NodePrivateKey
+          NODE_PUBLIC_KEY_SECRET_ARN: !Ref NodePublicKey
+      Code:
+        S3Bucket: !Sub ${CreatorFunctionS3Bucket}
+        S3Key: !Sub ${CreatorFunctionS3Key}
+
+  APIKeyCustomResource:
+    Type: Custom::TsmNodeKeys
+    Properties:
+      ServiceToken: !Sub ${APIKeyCreatorFunction.Arn}
+      NodeAPIKeySecretArn: !Sub ${NodeAPIKey}
+      NodePrivateKeySecretArn: !Sub ${NodePrivateKey}
+      NodePublicKeySecretArn: !Sub ${NodePublicKey}
+
+Outputs:
+  SSMParameter:
+    Description: The SSM Parameter for the Builder Vault to consume
+    Value: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NodeBootstrapParameter}"
+  BuilderVaultNamespace:
+    Description: The namespace of the Builder Vault
+    Value: !Ref Namespace
+  NodeAPIKey:
+    Description: The API Key that you use to access your builder vault node
+    Value: !Ref NodeAPIKey
+  NodePrivateKey:
+    Description: The private key that you use to access your builder vault node
+    Value: !Ref NodePrivateKey
+  NodePublicKey:
+    Description: The public key that you use to access your builder vault node
+    Value: !Ref NodePublicKey
+  NodeMasterEncryptionKey:
+    Description: The master encryption key that you use to encrypt your builder vault node
+    Value: !Ref NodeMasterEncryptionKey
+  NodeSecretManagerKMSKey:
+    Description: The KMS key that you use to encrypt your builder vault node
+    Value: !Ref NodeSecretManagerKMSKey
+  ApiKeyCreatorFunction:
+    Description: "Api Key Creator ARN"
+    Value: !Ref APIKeyCreatorFunction
