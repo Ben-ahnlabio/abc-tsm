@@ -1,0 +1,35 @@
+[Player]
+	Index = 0
+	PrivateKey = "MHcCAQEEIL7gjAGTs6i7q4eLVfA5FPc9/xobqhjxFOUyGScxsvTVoAoGCCqGSM49AwEHoUQDQgAEkAzm+8yn+d0ypywEwtgNnjisUkXBH17HpOd9YqRDybobqmCuaZA8cqAyLFS/qlu6j7lKCDWBwTElXJgvG9nywQ=="
+
+[Players.1]
+	Address = "tcp://tsm-node-1-0.dev-tsm1.myabcwallet.com:9000?connectionPoolSize=6&connectionLifetime=5m"
+	PublicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+zjFuzcHjYpgSCJ8ZELxsYfRRk0ATVLy9Mub9XmsnHFUvSczDGSdpAatMmoQ5yYN3ESMo6AjNPokELO3eNt8nQ=="
+
+[Players.2]
+	Address = "tcp://tsm-node-2-0.dev-tsm.myabcwallet.com:9000?connectionPoolSize=6&connectionLifetime=5m"
+	PublicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Xbeidiep/eYYVHlYlyg99uzqNtsoJlVAlDf/m78zNu5bCTTBRUEg66ahw+j5I23xgoKAQalTihtIFwYqQYQNA=="
+  
+[Database]
+	DriverName = "sqlite3"
+	DataSourceName = "/data/tsm_node_mob1.sqlite"
+	EncryptorMasterPassword = "Q3DTN6BVn2OBhmdzG9KXOci5OIgTQObZh23e3D044f6IN2StBDgBP49jJ0X8NPGN"
+
+[SDKServer]
+  Port = 8000
+
+[SEPD19S]
+  EnableResharing = true
+  EnableShareBackup = true
+  EnableERSExport = true
+  EnableExport = true
+
+[DKLS19]
+  EnableResharing = true
+  EnableShareBackup = true
+  EnableERSExport = true
+  EnableExport = true
+
+[[Authentication.APIKeys]]
+  APIKey = "IntV2sEZRwwd2F+UkDLC7zmFhwvpxAwb0eQKwdEnSZU="  # apikey0
+  ApplicationID = "demoapp"
